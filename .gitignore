@@ -1,14 +1,14 @@
-# Prerequisites
-/.vscode/
-/obj/
-/bin/
-*.d
+# Directories for Visual Studio Code and build artifacts
+.vscode/
+obj/
+bin/
 
 # Compiled Object files
-*.slo
-*.lo
 *.o
 *.obj
+
+# Dependency files
+*.d
 
 # Precompiled Headers
 *.gch
@@ -34,4 +34,5 @@
 *.out
 *.app
 
-*.gitignore
+# Ignore gitignore file itself (optional, usually not needed)
+# .gitignore
