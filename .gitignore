@@ -1,5 +1,7 @@
 # Prerequisites
 /.vscode/
+/obj/
+/bin/
 *.d
 
 # Compiled Object files
