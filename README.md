@@ -5,10 +5,7 @@
 ## Features
 
 - **Port Checking**: Test the availability of specific TCP ports on remote servers.
-- **Timeout Handling**: Set a timeout for connection attempts and receive detailed error messages.
-- **Cross-Platform Support**: Works on both Windows and Unix-like systems.
-- **Detailed Error Messages**: Provides specific error messages such as "Request Timed Out" and "Closed Ports".
-- **Metadata Embedding**: Includes detailed metadata in the executable for versioning and author information.
+- **Cross-Platform Support**: Should Work on both Windows and Unix-like systems.
 
 ## Installation
 
