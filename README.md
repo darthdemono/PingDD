@@ -1,5 +1,3 @@
-Here's a detailed `README.md` for your `PingDD` project on GitHub:
-
 # PingDD
 
 **PingDD** is a versatile ping tool for TCP port checking. This utility is designed to help network administrators and enthusiasts test the availability and responsiveness of specific TCP ports on remote servers.
