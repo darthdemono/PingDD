@@ -1,4 +1,5 @@
 # Prerequisites
+/.vscode/
 *.d
 
 # Compiled Object files
@@ -32,3 +33,4 @@
 *.app
 
 *.rc
+*.gitignore
