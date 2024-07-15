@@ -58,15 +58,6 @@ make
 ./pingdd example.com -p 80 -t 5000
 ```
 
-## Error Handling
-
-PingDD provides detailed error messages for different connection issues:
-
-- **Request Timed Out**: When the connection attempt exceeds the specified timeout.
-- **Closed Ports**: When the service is online but the port is closed.
-- **Cannot Resolve Host**: When the hostname cannot be resolved to an IP address.
-- **General Failure**: For any other unspecified errors.
-
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request for any improvements or bug fixes.
