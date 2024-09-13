@@ -37,14 +37,14 @@ make
 ## Usage
 
 ```bash
-./pingdd <hostname> -p <port> -c [time] -t [timeout]
+./pingdd <hostname> -p <port> -c <time> -t [timeout]
 ```
 
 - `hostname`: The address of the server you want to test.
 - `port`: The TCP port you want to check.
 - `time`: The amount of times port has to be pinged (Default infinite)
 - `timeout` (optional): Timeout for the connection attempt in milliseconds.
-- 
+
 ### Example
 
 ```bash
