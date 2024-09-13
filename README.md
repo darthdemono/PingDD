@@ -1,11 +1,6 @@
 # PingDD
 
-**PingDD** is a versatile ping tool for TCP port checking. This utility is designed to help network administrators and enthusiasts test the availability and responsiveness of specific TCP ports on remote servers.
-
-## Features
-
-- **Port Checking**: Test the availability of specific TCP ports on remote servers.
-- **Cross-Platform Support**: Should Work on both Windows and Unix-like systems.
+**PingDD** is a ping tool for TCP port checking. This utility is designed to help network administrators and enthusiasts test the availability and responsiveness of specific TCP ports on remote servers.
 
 ## Installation
 
@@ -42,17 +37,18 @@ make
 ## Usage
 
 ```bash
-./pingdd <hostname> -p <port> -t [timeout]
+./pingdd <hostname> -p <port> -c [time] -t [timeout]
 ```
 
 - `hostname`: The address of the server you want to test.
 - `port`: The TCP port you want to check.
+- `time`: The amount of times port has to be pinged (Default infinite)
 - `timeout` (optional): Timeout for the connection attempt in milliseconds.
-
+- 
 ### Example
 
 ```bash
-./pingdd example.com -p 80 -t 5000
+./pingdd example.com -p 80 -c 100
 ```
 
 ## Contributing
