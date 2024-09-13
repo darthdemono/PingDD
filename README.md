@@ -1,6 +1,6 @@
 # PingDD
 
-**PingDD** is a ping tool for TCP port checking. This utility is designed to help network administrators and enthusiasts test the availability and responsiveness of specific TCP ports on remote servers.
+**PingDD** is a ping tool for TCP port checking. This utility is designed to help network administrators and enthusiasts test the availability and responsiveness of specific TCP ports on remote servers. It's practically a revival of Paping. 
 
 ## Installation
 
