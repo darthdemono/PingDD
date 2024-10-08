@@ -1,4 +1,4 @@
-# PingDD
+8# PingDD
 
 **PingDD** is a ping tool for TCP port checking. This utility is designed to help network administrators and enthusiasts test the availability and responsiveness of specific TCP ports on remote servers. It's practically a revival of Paping. 
 
@@ -13,7 +13,7 @@
 ### Cloning the Repository
 
 ```bash
-git clone https://github.com/yourusername/pingdd.git
+git clone https://github.com/darthdemono/pingdd.git
 cd pingdd
 ```
 
