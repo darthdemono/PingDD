@@ -9,6 +9,7 @@
 #include "print.h"
 #include "i18n.h"
 #include "arguments.h"
+#include "version.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -81,7 +82,7 @@ int main(int argc, char *argv[])
     /* Print header */
     (void)snprintf(header, sizeof(header),
                    "%s v%s - Copyright (c) %s\n",
-                   NAME, VERSION, AUTHOR);
+                   NAME, PINGDD_VERSION_FULL, AUTHOR);
     FormattedPrint(PRINT_BLUE, header);
 
     /* Print connecting info (segment colors like original C++) */

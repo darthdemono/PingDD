@@ -38,7 +38,6 @@
 
 /* Application constants */
 #define NAME "PingDD"
-#define VERSION "1.0.0"
 #define AUTHOR "Jubair Hasan (Joy)"
 
 /* Sizes */
@@ -47,8 +46,8 @@
 
 /* Defaults */
 #define DEFAULT_TIMEOUT (1000U)
-#define DEFAULT_PORT       (0U)
-#define INFINITE_COUNT     (-1)
+#define DEFAULT_PORT (0U)
+#define INFINITE_COUNT (-1)
 #define DEFAULT_PORT (0U)   /* ADD THIS */
 #define INFINITE_COUNT (-1) /* ADD THIS */
 

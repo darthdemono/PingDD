@@ -5,6 +5,7 @@
  */
 
 #include "arguments.h"
+#include "version.h"
 #include "print.h"
 
 /**
@@ -15,7 +16,7 @@ void PrintBanner(void)
     char banner[512U] = {0};
     (void)snprintf(banner, sizeof(banner),
                    "%s v%s - Copyright (c) %s\n",
-                   NAME, VERSION, AUTHOR);
+                   NAME, PINGDD_VERSION_FULL, AUTHOR);
     FormattedPrint(PRINT_BLUE, banner);
 }
 

@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   build-windows-mingw:
@@ -19,12 +19,35 @@ jobs:
         uses: msys2/setup-msys2@v2
         with:
           update: true
-          # Install toolchain + make
           install: >-
             base-devel
             mingw-w64-i686-toolchain
-          # Use the MinGW32 environment
           msystem: MINGW32
+
+      - name: Show environment
+        shell: msys2 {0}
+        run: |
+          pwd
+          ls
+
+      - name: Generate version header
+        # Use bash on Windows host to compute version string
+        shell: bash
+        run: |
+          COMMIT_SHORT=$(git rev-parse --short HEAD)
+          VERSION_BASE="1.1.0"
+          VERSION_FULL="${VERSION_BASE}+${COMMIT_SHORT}"
+          echo "VERSION_FULL=${VERSION_FULL}"
+          mkdir -p src/lib
+          cat > src/lib/version.h <<EOF
+          #ifndef PINGDD_VERSION_H
+          #define PINGDD_VERSION_H
+
+          #define PINGDD_VERSION       "${VERSION_BASE}"
+          #define PINGDD_VERSION_FULL  "${VERSION_FULL}"
+
+          #endif /* PINGDD_VERSION_H */
+          EOF
 
       - name: Build PingDD (32-bit)
         shell: msys2 {0}
@@ -35,9 +58,16 @@ jobs:
           make clean
           make
 
+      - name: Compute short SHA
+        id: vars
+        shell: bash
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
       - name: Upload artifact (pingdd.exe)
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: pingdd-win32
+          name: pingdd-win32-${{ steps.vars.outputs.short_sha }}
           path: bin/win/x86/pingdd.exe
