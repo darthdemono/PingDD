@@ -3,7 +3,7 @@
 #
 # Outputs:
 #   Windows 32-bit : bin/win/x86/pingdd.exe   (TARGET_OS=win32)
-#   Linux          : bin/linux/pingdd         (TARGET_OS=linux)
+#   Linux          : bin/linux/pingdd        (TARGET_OS=linux)
 #
 # Default TARGET_OS:
 #   - On Windows hosts: win32
@@ -45,7 +45,7 @@ LDFLAGS =
 BINDIR  =
 OBJDIR  =
 EXEC    =
-RC_OBJ  =
+RC_OBJ  =    # always empty now
 
 # ----------------------------------------------------------------------------
 # Per-OS configuration
@@ -57,7 +57,6 @@ ifeq ($(TARGET_OS), win32)
     BINDIR  = bin/win/x86
     OBJDIR  = obj/win/x86
     EXEC    = $(BINDIR)/pingdd.exe
-    RC_OBJ  = $(OBJDIR)/version.res
 else ifeq ($(TARGET_OS), linux)
     # Linux native
     CC      = gcc
@@ -66,7 +65,6 @@ else ifeq ($(TARGET_OS), linux)
     BINDIR  = bin/linux
     OBJDIR  = obj/linux
     EXEC    = $(BINDIR)/pingdd
-    RC_OBJ  =
 else
     $(error Unknown TARGET_OS '$(TARGET_OS)' (use win32, linux))
 endif
@@ -93,16 +91,12 @@ linux:
 # ----------------------------------------------------------------------------
 
 # Link
-$(EXEC): $(BINDIR) $(OBJDIR) $(OBJECTS) $(RC_OBJ)
-	$(CC) $(OBJECTS) $(RC_OBJ) $(LDFLAGS) -o $@
+$(EXEC): $(BINDIR) $(OBJDIR) $(OBJECTS)
+	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
 
 # Compile
 $(OBJDIR)/%.o: src/%.c $(HEADERS) | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
-
-# Windows resource (only used when RC_OBJ is non-empty)
-$(OBJDIR)/version.res: version.rc | $(OBJDIR)
-	windres -O coff version.rc -o $@
 
 # Directories (MSYS2/Linux/macOS; used on CI and in MSYS shells)
 $(BINDIR) $(OBJDIR):
