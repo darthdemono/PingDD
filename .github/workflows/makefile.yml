@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-windows-mingw:
+    name: Build (Windows, MinGW32 + make)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install MSYS2 & MinGW32
+        uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          # Install toolchain + make
+          install: >-
+            base-devel
+            mingw-w64-i686-toolchain
+          # Use the MinGW32 environment
+          msystem: MINGW32
+
+      - name: Build PingDD (32-bit)
+        shell: msys2 {0}
+        run: |
+          echo "Using gcc:"
+          gcc --version
+          echo "Building with make..."
+          make clean
+          make
+
+      - name: Upload artifact (pingdd.exe)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pingdd-win32
+          path: bin/win/x86/pingdd.exe
