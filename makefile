@@ -16,6 +16,11 @@
 TARGET_OS ?= auto
 TARGET_OS := $(strip $(TARGET_OS))
 
+# Directories
+$(BINDIR) $(OBJDIR):
+	mkdir -p $@
+
+
 ifeq ($(TARGET_OS), auto)
   ifeq ($(OS),Windows_NT)
     TARGET_OS := win32
