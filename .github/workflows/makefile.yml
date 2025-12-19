@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ["v*"] # allow tag pushes too (e.g. v1.1.1)
   pull_request:
     branches: [main]
 
@@ -10,6 +11,9 @@ jobs:
   build-windows-mingw:
     name: Build (Windows, MinGW32 + make)
     runs-on: windows-latest
+
+    permissions:
+      contents: write # needed to create releases
 
     steps:
       - name: Checkout
@@ -31,19 +35,23 @@ jobs:
           ls
 
       - name: Generate version header
-        # Use bash on Windows host to compute version string
         shell: bash
         run: |
-          COMMIT_SHORT=$(git rev-parse --short HEAD)
-          VERSION_BASE="1.1.0"
-          VERSION_FULL="${VERSION_BASE}+${COMMIT_SHORT}"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            RAW_TAG="${GITHUB_REF_NAME}"          # e.g. v1.1.1 or 1.1.1
+            VERSION_FULL="${RAW_TAG#v}"
+          else
+            VERSION_BASE="1.1"
+            PATCH="${GITHUB_RUN_NUMBER}"
+            VERSION_FULL="${VERSION_BASE}.${PATCH}"
+          fi
           echo "VERSION_FULL=${VERSION_FULL}"
           mkdir -p src/lib
           cat > src/lib/version.h <<EOF
           #ifndef PINGDD_VERSION_H
           #define PINGDD_VERSION_H
 
-          #define PINGDD_VERSION       "${VERSION_BASE}"
+          #define PINGDD_VERSION       "${VERSION_FULL}"
           #define PINGDD_VERSION_FULL  "${VERSION_FULL}"
 
           #endif /* PINGDD_VERSION_H */
@@ -71,3 +79,22 @@ jobs:
         with:
           name: pingdd-win32-${{ steps.vars.outputs.short_sha }}
           path: bin/win/x86/pingdd.exe
+
+      # ----- Auto-release block: only runs on tag pushes -----
+      - name: Create GitHub Release
+        if: success() && github.ref_type == 'tag'
+        id: create_release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.ref_name }}
+          name: PingDD ${{ github.ref_name }}
+          body: "Automated release for tag ${{ github.ref_name }}"
+          draft: false
+          prerelease: false
+
+      - name: Upload exe to Release
+        if: success() && github.ref_type == 'tag'
+        uses: AButler/upload-release-assets@v3.0
+        with:
+          files: "bin/win/x86/pingdd.exe"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
