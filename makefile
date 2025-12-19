@@ -3,7 +3,7 @@
 #
 # Outputs:
 #   Windows 32-bit : bin/win/x86/pingdd.exe   (TARGET_OS=win32)
-#   Linux          : bin/linux/pingdd        (TARGET_OS=linux)
+#   Linux          : bin/linux/pingdd         (TARGET_OS=linux)
 #
 # Default TARGET_OS:
 #   - On Windows hosts: win32
@@ -15,11 +15,6 @@
 # ----------------------------------------------------------------------------
 TARGET_OS ?= auto
 TARGET_OS := $(strip $(TARGET_OS))
-
-# Directories
-$(BINDIR) $(OBJDIR):
-	mkdir -p $@
-
 
 ifeq ($(TARGET_OS), auto)
   ifeq ($(OS),Windows_NT)
@@ -109,17 +104,16 @@ $(OBJDIR)/%.o: src/%.c $(HEADERS) | $(OBJDIR)
 $(OBJDIR)/version.res: version.rc | $(OBJDIR)
 	windres -O coff version.rc -o $@
 
-# Directories (portable: try Windows cmd.exe mkdir, then POSIX mkdir -p)
+# Directories (MSYS2/Linux/macOS; used on CI and in MSYS shells)
 $(BINDIR) $(OBJDIR):
-	-@mkdir $(subst /,\,$@) 2>nul || mkdir -p $@
+	mkdir -p $@
 
 # ----------------------------------------------------------------------------
 # Utility targets
 # ----------------------------------------------------------------------------
 
 clean:
-	-@rmdir /s /q bin 2>nul || rm -rf bin 2>/dev/null || true
-	-@rmdir /s /q obj 2>nul || rm -rf obj 2>/dev/null || true
+	rm -rf bin obj
 
 debug: CFLAGS += -g
 debug: all
