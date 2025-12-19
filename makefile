@@ -1,60 +1,135 @@
-# ULTRA-SIMPLE Cross-Platform Makefile for PingDD - FIXED
-CC = gcc
-CFLAGS = -Wall -Wextra -std=c99 -Isrc/lib -static
-LDFLAGS = -lws2_32
+# ============================================================================
+# Universal Makefile for PingDD (Windows 32-bit, Linux)
+#
+# Outputs:
+#   Windows 32-bit : bin/win/x86/pingdd.exe   (TARGET_OS=win32)
+#   Linux          : bin/linux/pingdd        (TARGET_OS=linux)
+#
+# Default TARGET_OS:
+#   - On Windows hosts: win32
+#   - On Linux hosts  : linux
+# ============================================================================
 
-# Source files
-SOURCES = $(wildcard src/*.c)
-OBJECTS = $(SOURCES:src/%.c=obj/%.o)
-EXEC = bin/pingdd.exe
-RC_OBJ = obj/version.res
+# ----------------------------------------------------------------------------
+# Target OS selection
+# ----------------------------------------------------------------------------
+TARGET_OS ?= auto
+TARGET_OS := $(strip $(TARGET_OS))
 
-# Headers
-HEADERS = $(wildcard src/lib/*.h)
+ifeq ($(TARGET_OS), auto)
+  ifeq ($(OS),Windows_NT)
+    TARGET_OS := win32
+  else
+    UNAME_S := $(shell uname -s)
+    ifeq ($(UNAME_S),Linux)
+      TARGET_OS := linux
+    else
+      $(error Unknown host OS; set TARGET_OS=win32/linux)
+    endif
+  endif
+endif
 
-.PHONY: all clean windows linux debug info help
+TARGET_OS := $(strip $(TARGET_OS))
 
+# ----------------------------------------------------------------------------
+# Common settings
+# ----------------------------------------------------------------------------
+CFLAGS_COMMON = -Wall -Wextra -std=c99 -Isrc/lib
+SOURCES       = $(wildcard src/*.c)
+HEADERS       = $(wildcard src/lib/*.h)
+
+# Defaults (overridden per OS)
+CC      =
+CFLAGS  =
+LDFLAGS =
+BINDIR  =
+OBJDIR  =
+EXEC    =
+RC_OBJ  =
+
+# ----------------------------------------------------------------------------
+# Per-OS configuration
+# ----------------------------------------------------------------------------
+ifeq ($(TARGET_OS), win32)
+    CC      = i686-w64-mingw32-gcc
+    CFLAGS  = $(CFLAGS_COMMON) -static
+    LDFLAGS = -lws2_32
+    BINDIR  = bin/win/x86
+    OBJDIR  = obj/win/x86
+    EXEC    = $(BINDIR)/pingdd.exe
+    RC_OBJ  = $(OBJDIR)/version.res
+else ifeq ($(TARGET_OS), linux)
+    # Linux native
+    CC      = gcc
+    CFLAGS  = $(CFLAGS_COMMON)
+    LDFLAGS =
+    BINDIR  = bin/linux
+    OBJDIR  = obj/linux
+    EXEC    = $(BINDIR)/pingdd
+    RC_OBJ  =
+else
+    $(error Unknown TARGET_OS '$(TARGET_OS)' (use win32, linux))
+endif
+
+OBJECTS = $(SOURCES:src/%.c=$(OBJDIR)/%.o)
+
+# ----------------------------------------------------------------------------
+# Phony targets
+# ----------------------------------------------------------------------------
+.PHONY: all clean win32 linux debug info help
+
+# Default build
 all: $(EXEC)
 
-# Link - FIXED spacing/tabs
-$(EXEC): bin $(OBJECTS) $(RC_OBJ)
+# OS shortcuts
+win32:
+	$(MAKE) TARGET_OS=win32
+
+linux:
+	$(MAKE) TARGET_OS=linux
+
+# ----------------------------------------------------------------------------
+# Build rules
+# ----------------------------------------------------------------------------
+
+# Link
+$(EXEC): $(BINDIR) $(OBJDIR) $(OBJECTS) $(RC_OBJ)
 	$(CC) $(OBJECTS) $(RC_OBJ) $(LDFLAGS) -o $@
 
-# Compile - FIXED spacing/tabs
-obj/%.o: src/%.c $(HEADERS) | obj
+# Compile
+$(OBJDIR)/%.o: src/%.c $(HEADERS) | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Resource - FIXED windres syntax
-obj/version.res: version.rc | obj
+# Windows resource (only used when RC_OBJ is non-empty)
+$(OBJDIR)/version.res: version.rc | $(OBJDIR)
 	windres -O coff version.rc -o $@
 
-# Directories - FIXED spacing
-bin obj:
-	-mkdir $@
+# Directories (portable: try Windows cmd.exe mkdir, then POSIX mkdir -p)
+$(BINDIR) $(OBJDIR):
+	-@mkdir $(subst /,\,$@) 2>nul || mkdir -p $@
+
+# ----------------------------------------------------------------------------
+# Utility targets
+# ----------------------------------------------------------------------------
 
 clean:
-	-rmdir /s /q bin 2>nul
-	-rmdir /s /q obj 2>nul
+	-@rmdir /s /q bin 2>nul || rm -rf bin 2>/dev/null || true
+	-@rmdir /s /q obj 2>nul || rm -rf obj 2>/dev/null || true
 
-# Linux version
-linux:
-	$(MAKE) LDFLAGS='' EXEC='bin_linux/pingdd' RC_OBJ=''
-
-# Debug
 debug: CFLAGS += -g
 debug: all
 
-# Info - FIXED spacing
 info:
-	@echo "Sources: $(notdir $(SOURCES))"
-	@echo "Objects: $(notdir $(OBJECTS))"
-	@echo "Target: $(EXEC)"
+	@echo "TARGET_OS = $(TARGET_OS)"
+	@echo "CC        = $(CC)"
+	@echo "Sources   = $(notdir $(SOURCES))"
+	@echo "Objects   = $(notdir $(OBJECTS))"
+	@echo "Target    = $(EXEC)"
 
-# Help - FIXED spacing
 help:
-	@echo "make         # Windows (bin/pingdd.exe)"
-	@echo "make linux   # Linux (bin_linux/pingdd)"
-	@echo "make clean   # Clean"
-	@echo "make debug   # Debug build"
-	@echo "make info    # Show build info"
-	@echo "make help    # This help"
+	@echo "make               # Auto-detect host (Windows->win32, Linux->linux)"
+	@echo "make win32         # Windows 32-bit  -> bin/win/x86/pingdd.exe"
+	@echo "make linux         # Linux native    -> bin/linux/pingdd"
+	@echo "make clean         # Remove bin/ and obj/"
+	@echo "make debug         # Build with debug info"
+	@echo "make info          # Show build configuration"
