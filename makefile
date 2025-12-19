@@ -1,7 +1,18 @@
 # ============================================================================
 # Universal Makefile for PingDD (Windows 32-bit, Linux)
+#
+# Outputs:
+#   Windows 32-bit : bin/win/x86/pingdd.exe   (TARGET_OS=win32)
+#   Linux          : bin/linux/pingdd        (TARGET_OS=linux)
+#
+# Default TARGET_OS:
+#   - On Windows hosts: win32
+#   - On Linux hosts  : linux
 # ============================================================================
 
+# ----------------------------------------------------------------------------
+# Target OS selection
+# ----------------------------------------------------------------------------
 TARGET_OS ?= auto
 TARGET_OS := $(strip $(TARGET_OS))
 
@@ -27,13 +38,18 @@ CFLAGS_COMMON = -Wall -Wextra -std=c99 -Isrc/lib
 SOURCES       = $(wildcard src/*.c)
 HEADERS       = $(wildcard src/lib/*.h)
 
+# Defaults (overridden per OS)
 CC      =
 CFLAGS  =
 LDFLAGS =
 BINDIR  =
 OBJDIR  =
 EXEC    =
+RC_OBJ  =    # always empty now
 
+# ----------------------------------------------------------------------------
+# Per-OS configuration
+# ----------------------------------------------------------------------------
 ifeq ($(TARGET_OS), win32)
     CC      = i686-w64-mingw32-gcc
     CFLAGS  = $(CFLAGS_COMMON) -static
@@ -42,6 +58,7 @@ ifeq ($(TARGET_OS), win32)
     OBJDIR  = obj/win/x86
     EXEC    = $(BINDIR)/pingdd.exe
 else ifeq ($(TARGET_OS), linux)
+    # Linux native
     CC      = gcc
     CFLAGS  = $(CFLAGS_COMMON)
     LDFLAGS =
@@ -54,15 +71,24 @@ endif
 
 OBJECTS = $(SOURCES:src/%.c=$(OBJDIR)/%.o)
 
+# ----------------------------------------------------------------------------
+# Phony targets
+# ----------------------------------------------------------------------------
 .PHONY: all clean win32 linux debug info help
 
+# Default build
 all: $(EXEC)
 
+# OS shortcuts
 win32:
 	$(MAKE) TARGET_OS=win32
 
 linux:
 	$(MAKE) TARGET_OS=linux
+
+# ----------------------------------------------------------------------------
+# Build rules
+# ----------------------------------------------------------------------------
 
 # Link
 $(EXEC): $(BINDIR) $(OBJDIR) $(OBJECTS)
@@ -72,9 +98,13 @@ $(EXEC): $(BINDIR) $(OBJDIR) $(OBJECTS)
 $(OBJDIR)/%.o: src/%.c $(HEADERS) | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Directories
+# Directories (MSYS2/Linux/macOS; used on CI and in MSYS shells)
 $(BINDIR) $(OBJDIR):
 	mkdir -p $@
+
+# ----------------------------------------------------------------------------
+# Utility targets
+# ----------------------------------------------------------------------------
 
 clean:
 	rm -rf bin obj
