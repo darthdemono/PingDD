@@ -1,10 +1,6 @@
-// src/main.c - FULL MISRA C COMPLIANT VERSION
 /**
  * @file main.c
- * @brief PingDD main entry point - MISRA C compliant
- * @author Jubair Hasan (Joy)
- * @version 1.0.0
- * @date 2025-12-19
+ * @brief PingDD main entry point - MISRA C style
  */
 
 #include "standard.h"
@@ -19,17 +15,16 @@
 #include <string.h>
 #include <signal.h>
 #include <stdbool.h>
-#include <math.h> /* For fmin, fmax */
 
 #ifdef _WIN32
-#define usleep(ms) Sleep((ms) / 1000U)
 #include <windows.h>
+#define usleep(ms) Sleep((ms) / 1000U)
 #else
 #include <unistd.h>
 #endif
 
-/* Global interrupt flag */
-static volatile bool g_interrupted = false;
+/* Global interrupt flag: set by SIGINT handler, polled in main loop */
+static volatile sig_atomic_t g_interrupted = 0;
 
 /* Static function prototypes */
 static void SignalHandler(int signal);
@@ -40,19 +35,11 @@ static void SignalHandler(int signal);
  */
 static void SignalHandler(int signal)
 {
-    (void)signal; /* MISRA: Unused parameter */
     if (signal == SIGINT)
     {
-        printf("\nReceived Ctrl+C. Printing statistics...\n");
-        g_interrupted = true;
+        g_interrupted = 1;
     }
 }
-
-/**
- * @brief Print final statistics with colors
- * @param stats Statistics structure
- * @return 0 on success
- */
 
 /**
  * @brief Main entry point
@@ -92,28 +79,34 @@ int main(int argc, char *argv[])
     }
 
     /* Print header */
-    (void)snprintf(header, sizeof(header), "%s v%s - Copyright (c) %s\n", NAME, VERSION, AUTHOR);
+    (void)snprintf(header, sizeof(header),
+                   "%s v%s - Copyright (c) %s\n",
+                   NAME, VERSION, AUTHOR);
     FormattedPrint(PRINT_BLUE, header);
 
-    /* Print connecting info */
+    /* Print connecting info (segment colors like original C++) */
     FormattedPrint(PRINT_YELLOW, "\nConnecting to ");
     FormattedPrint(PRINT_GREEN, args.Destination);
     FormattedPrint(PRINT_YELLOW, " on TCP ");
     {
         char port_buf[32U] = {0};
-        (void)snprintf(port_buf, sizeof(port_buf), "%u", (unsigned)args.Port);
+        (void)snprintf(port_buf, sizeof(port_buf), "%u",
+                       (unsigned)args.Port);
         FormattedPrint(PRINT_GREEN, port_buf);
     }
     FormattedPrint(PRINT_YELLOW, ":\n");
-    ResetColor(); /* Main ping loop */
-    while ((!g_interrupted) && ((args.Count == -1) || (i < args.Count)))
+    ResetColor();
+
+    /* Main ping loop */
+    while ((g_interrupted == 0) &&
+           ((args.Count == -1) || (i < args.Count)))
     {
         rtt = 0.0;
         connect_result = Connect(&host, args.Timeout, &rtt);
 
-        if (g_interrupted)
+        if (g_interrupted != 0)
         {
-            break;
+            break; /* fall through to stats print and clean exit */
         }
 
         if (connect_result == SUCCESS)
@@ -125,23 +118,27 @@ int main(int argc, char *argv[])
             FormattedPrint(PRINT_GREEN, host.IPAddress);
             FormattedPrint(PRINT_WHITE, ": time=");
 
-            (void)snprintf(rtt_buf, sizeof(rtt_buf), "%.2fms ", rtt * 1000.0);
+            /* more accurate RTT: adjust precision here if needed */
+            (void)snprintf(rtt_buf, sizeof(rtt_buf), "%.2fms ",
+                           rtt * 1000.0);
             FormattedPrint(PRINT_GREEN, rtt_buf);
 
             FormattedPrint(PRINT_WHITE, "protocol=");
             FormattedPrint(PRINT_GREEN, "TCP ");
             FormattedPrint(PRINT_WHITE, "port=");
 
-            (void)snprintf(port_buf, sizeof(port_buf), "%u", (unsigned)host.Port);
+            (void)snprintf(port_buf, sizeof(port_buf), "%u",
+                           (unsigned)host.Port);
             FormattedPrint(PRINT_GREEN, port_buf);
             (void)printf("\n");
 
-            Stats_UpdateMaxMin(&stats, rtt);
+            Stats_UpdateMaxMin(&stats, rtt); /* also updates Total */
             stats.Connects++;
         }
         else
         {
-            FormattedPrint(PRINT_RED, GetFriendlyTypeName(connect_result));
+            FormattedPrint(PRINT_RED,
+                           GetFriendlyTypeName(connect_result));
             (void)printf("\n");
             stats.Failures++;
         }
@@ -151,7 +148,7 @@ int main(int argc, char *argv[])
 
         if (args.Count != -1)
         {
-            (void)usleep(50000U); /* 50ms delay */
+            (void)usleep(50000U); /* 50 ms */
         }
     }
 
@@ -162,22 +159,26 @@ int main(int argc, char *argv[])
 
         if (stats.Attempts > 0U)
         {
-            fail_percent = ((double)stats.Failures / (double)stats.Attempts) * 100.0;
+            fail_percent =
+                ((double)stats.Failures / (double)stats.Attempts) * 100.0;
         }
 
         FormattedPrint(PRINT_YELLOW, "\nConnection statistics:\n");
         ResetColor();
 
         (void)printf("        Attempted = ");
-        (void)snprintf(buf, sizeof(buf), "%lu", (unsigned long)stats.Attempts);
+        (void)snprintf(buf, sizeof(buf), "%lu",
+                       (unsigned long)stats.Attempts);
         FormattedPrint(PRINT_BLUE, buf);
 
         (void)printf(" , Connected = ");
-        (void)snprintf(buf, sizeof(buf), "%lu", (unsigned long)stats.Connects);
+        (void)snprintf(buf, sizeof(buf), "%lu",
+                       (unsigned long)stats.Connects);
         FormattedPrint(PRINT_BLUE, buf);
 
         (void)printf(" , Failed = ");
-        (void)snprintf(buf, sizeof(buf), "%lu", (unsigned long)stats.Failures);
+        (void)snprintf(buf, sizeof(buf), "%lu",
+                       (unsigned long)stats.Failures);
         FormattedPrint(PRINT_BLUE, buf);
 
         (void)printf(" ( ");
@@ -185,19 +186,23 @@ int main(int argc, char *argv[])
         FormattedPrint(PRINT_BLUE, buf);
         (void)printf(" )\n");
 
-        FormattedPrint(PRINT_YELLOW, "Approximate connection times:\n");
+        FormattedPrint(PRINT_YELLOW,
+                       "Approximate connection times:\n");
         ResetColor();
 
         (void)printf("        Minimum = ");
-        (void)snprintf(buf, sizeof(buf), "%.2fms", stats.Minimum * 1000.0);
+        (void)snprintf(buf, sizeof(buf), "%.2fms",
+                       stats.Minimum * 1000.0);
         FormattedPrint(PRINT_BLUE, buf);
 
         (void)printf(" , Maximum = ");
-        (void)snprintf(buf, sizeof(buf), "%.2fms", stats.Maximum * 1000.0);
+        (void)snprintf(buf, sizeof(buf), "%.2fms",
+                       stats.Maximum * 1000.0);
         FormattedPrint(PRINT_BLUE, buf);
 
         (void)printf(" , Average = ");
-        (void)snprintf(buf, sizeof(buf), "%.2fms", Stats_Average(&stats) * 1000.0);
+        (void)snprintf(buf, sizeof(buf), "%.2fms",
+                       Stats_Average(&stats) * 1000.0);
         FormattedPrint(PRINT_BLUE, buf);
         (void)printf("\n");
     }

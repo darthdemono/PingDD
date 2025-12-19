@@ -1,61 +1,60 @@
 /**
  * @file timer.c
- * @brief MISRA C compliant high-resolution timer implementation
- * @author Jubair Hasan (Joy)
- * @version 1.0.0
- * @date 2025-12-19
+ * @brief Cross-platform monotonic high-resolution timer implementation
  */
 
 #include "timer.h"
 
-#include <sys/time.h> /* For gettimeofday */
-#include <stdbool.h>
-
-/* Constants */
-#define MICROSECONDS_PER_SECOND (1000000.0)
-
-/**
- * @brief Start high-resolution timer
- * @param timer Timer structure to initialize
- */
 void Timer_Start(timer_t *const timer)
 {
-    if (timer != NULL)
+    if (timer == NULL)
     {
-        timer->hasValue = true;
-        (void)gettimeofday(&timer->start, NULL);
+        return;
     }
+
+    timer->hasValue = true;
+
+#ifdef _WIN32
+    (void)QueryPerformanceFrequency(&timer->freq);
+    (void)QueryPerformanceCounter(&timer->start);
+#else
+    (void)clock_gettime(CLOCK_MONOTONIC, &timer->start);
+#endif
 }
 
-/**
- * @brief Stop timer and return elapsed time in seconds
- * @param timer Timer structure
- * @return Elapsed time in seconds (0.0 if invalid)
- */
 double Timer_Stop(timer_t *const timer)
 {
-    double elapsed_usec = 0.0;
-    double start_usec = 0.0;
-    double stop_usec = 0.0;
+    double elapsed = 0.0;
 
-    /* Validate input */
-    if ((timer == NULL) || (!timer->hasValue))
+    if ((timer == NULL) || (timer->hasValue == false))
     {
         return 0.0;
     }
 
-    /* Get stop time */
-    (void)gettimeofday(&timer->stop, NULL);
+#ifdef _WIN32
+    LARGE_INTEGER end;
+    double ticks = 0.0;
 
-    /* Convert to microseconds with overflow-safe calculation */
-    start_usec = ((double)timer->start.tv_sec * MICROSECONDS_PER_SECOND) +
-                 (double)timer->start.tv_usec;
-    stop_usec = ((double)timer->stop.tv_sec * MICROSECONDS_PER_SECOND) +
-                (double)timer->stop.tv_usec;
+    (void)QueryPerformanceCounter(&end);
 
-    /* Calculate elapsed time */
-    elapsed_usec = stop_usec - start_usec;
+    ticks = (double)(end.QuadPart - timer->start.QuadPart);
+    if (timer->freq.QuadPart != 0)
+    {
+        elapsed = ticks / (double)timer->freq.QuadPart; /* seconds */
+    }
+#else
+    struct timespec end;
+    long sec_diff = 0;
+    long nsec_diff = 0;
 
-    /* Return seconds */
-    return (elapsed_usec / MICROSECONDS_PER_SECOND);
+    (void)clock_gettime(CLOCK_MONOTONIC, &end);
+
+    sec_diff = (long)(end.tv_sec - timer->start.tv_sec);
+    nsec_diff = (long)(end.tv_nsec - timer->start.tv_nsec);
+
+    elapsed = (double)sec_diff + (double)nsec_diff / 1.0e9;
+#endif
+
+    timer->hasValue = false;
+    return elapsed;
 }

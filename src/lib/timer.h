@@ -1,33 +1,39 @@
 /**
  * @file timer.h
- * @brief High-resolution timer interface
- * @author Jubair Hasan (Joy)
+ * @brief Cross-platform monotonic high-resolution timer
  */
 
 #ifndef TIMER_H
 #define TIMER_H
 
-#include <stdbool.h>
-#include <sys/time.h>
+#include "standard.h"
 
-/* Timer structure */
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <time.h>
+#endif
+
 typedef struct
 {
     bool hasValue;
-    struct timeval start;
-    struct timeval stop;
+#ifdef _WIN32
+    LARGE_INTEGER start;
+    LARGE_INTEGER stop;
+    LARGE_INTEGER freq;
+#else
+    struct timespec start;
+    struct timespec stop;
+#endif
 } timer_t;
 
 /**
- * @brief Start high-resolution timer
- * @param timer Timer structure to initialize
+ * @brief Start the timer
  */
 void Timer_Start(timer_t *const timer);
 
 /**
- * @brief Stop timer and return elapsed time in seconds
- * @param timer Timer structure
- * @return Elapsed time in seconds (0.0 if invalid)
+ * @brief Stop the timer and return elapsed time in seconds
  */
 double Timer_Stop(timer_t *const timer);
 
