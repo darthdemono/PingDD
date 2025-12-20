@@ -175,14 +175,14 @@ jobs:
               gcc --version
 
               make clean
-              make linux
+              make linux EXEC_SUFFIX="-${{ matrix.distro_name }}"
             '
 
       - name: Upload ${{ matrix.distro_name }} artifact
         uses: actions/upload-artifact@v4
         with:
           name: pingdd-${{ matrix.distro_name }}-${{ steps.gitversion.outputs.SemVer }}
-          path: bin/linux/pingdd
+          path: bin/linux/pingdd-${{ matrix.distro_name }}
 
   # Job 3: Create Release (FIXED)
   release:

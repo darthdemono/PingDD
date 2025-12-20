@@ -39,6 +39,16 @@ EXEC    =
 # ----------------------------------------------------------------------------
 # Per-OS configuration
 # ----------------------------------------------------------------------------
+# Defaults (overridden per OS)
+CC      =
+CFLAGS  =
+LDFLAGS =
+BINDIR  =
+OBJDIR  =
+EXEC    =
+EXEC_SUFFIX ?=
+
+# Per-OS configuration
 ifeq ($(TARGET_OS), win32)
     CC      = i686-w64-mingw32-gcc
     CFLAGS  = $(CFLAGS_COMMON) -static
@@ -52,7 +62,8 @@ else ifeq ($(TARGET_OS), linux)
     LDFLAGS =
     BINDIR  = bin/linux
     OBJDIR  = obj/linux
-    EXEC    = $(BINDIR)/pingdd
+    # NOTE: add suffix into filename
+    EXEC    = $(BINDIR)/pingdd$(EXEC_SUFFIX)
 else
     $(error Unknown TARGET_OS '$(TARGET_OS)' (use win32, linux))
 endif
