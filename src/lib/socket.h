@@ -10,8 +10,25 @@
 #define SOCKET_H
 
 #include "standard.h"
-#include "host.h"
 
+#ifndef INVALID_SOCKET /* Only define if not already defined */
+#define INVALID_SOCKET -1
+#endif
+#ifndef SOCKET_ERROR
+#define SOCKET_ERROR -1
+#endif
+
+/* Define socket constants */
+#ifdef _WIN32
+#else
+#include <sys/socket.h>
+#include <netdb.h>
+#include <sys/select.h>
+#define INVALID_SOCKET -1
+#define SOCKET_ERROR -1
+#endif
+
+/* Function prototypes using host_t */
 /**
  * @brief Get human-readable name for error/result codes
  * @param type Error/result code
@@ -26,10 +43,7 @@ pcc_t GetFriendlyTypeName(int32_t const type);
  * @param rtt Output: round-trip time in seconds
  * @return SUCCESS or error code
  */
-int32_t Connect(host_t const *const host,
-                uint32_t const timeout,
-                double *const rtt);
-
+int32_t Connect(const host_t *const host, uint32_t const timeout_ms, double *const rtt);
 /**
  * @brief Resolve hostname to IP address
  * @param destination Hostname or IP address
@@ -44,9 +58,7 @@ int32_t Resolve(pcc_t const destination, host_t *const host);
  * @param type Protocol type (IPPROTO_TCP, etc.)
  * @param host Host structure to configure
  */
-void SetPortAndType(uint16_t const port,
-                    int32_t const type,
-                    host_t *const host);
+void SetPortAndType(uint16_t const port, int32_t const type, host_t *const host);
 
 /**
  * @brief Get socket protocol type constant

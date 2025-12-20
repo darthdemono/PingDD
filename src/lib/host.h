@@ -14,19 +14,6 @@
 #endif
 
 /**
- * @brief Host structure
- */
-typedef struct
-{
-    char Hostname[HOSTNAME_MAX_LEN];
-    char IPAddress[IPADDRESS_MAX_LEN];
-    bool HostIsIP;
-    uint16_t Port;
-    int32_t Type;
-    uint32_t ipAddress;
-} host_t;
-
-/**
  * @brief Get IP as string
  */
 pcc_t IPAddressString(host_t const *const host);

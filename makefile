@@ -1,13 +1,5 @@
 # ============================================================================
 # Universal Makefile for PingDD (Windows 32-bit, Linux)
-#
-# Outputs:
-#   Windows 32-bit : bin/win/pingdd.exe   (TARGET_OS=win32)
-#   Linux          : bin/linux/pingdd        (TARGET_OS=linux)
-#
-# Default TARGET_OS:
-#   - On Windows hosts: win32
-#   - On Linux hosts  : linux
 # ============================================================================
 
 # ----------------------------------------------------------------------------
@@ -29,12 +21,10 @@ ifeq ($(TARGET_OS), auto)
   endif
 endif
 
-TARGET_OS := $(strip $(TARGET_OS))
-
 # ----------------------------------------------------------------------------
 # Common settings
 # ----------------------------------------------------------------------------
-CFLAGS_COMMON = -W -Wall -Wextra -Wextra -Werror -std=c99 -Isrc/lib -fno-omit-frame-pointer
+CFLAGS_COMMON = -W -Wall -Wextra -Werror -std=c99 -Isrc/lib -fno-omit-frame-pointer
 SOURCES       = $(wildcard src/*.c)
 HEADERS       = $(wildcard src/lib/*.h)
 
@@ -45,7 +35,6 @@ LDFLAGS =
 BINDIR  =
 OBJDIR  =
 EXEC    =
-RC_OBJ  =    # always empty now
 
 # ----------------------------------------------------------------------------
 # Per-OS configuration
@@ -58,9 +47,8 @@ ifeq ($(TARGET_OS), win32)
     OBJDIR  = obj/win
     EXEC    = $(BINDIR)/pingdd.exe
 else ifeq ($(TARGET_OS), linux)
-    # Linux native
     CC      = gcc
-    CFLAGS  = $(CFLAGS_COMMON)
+    CFLAGS  = $(CFLAGS_COMMON) -D_POSIX_C_SOURCE=200112L -D_GNU_SOURCE
     LDFLAGS =
     BINDIR  = bin/linux
     OBJDIR  = obj/linux
@@ -90,6 +78,7 @@ linux:
 # Build rules
 # ----------------------------------------------------------------------------
 
+
 # Link
 $(EXEC): $(BINDIR) $(OBJDIR) $(OBJECTS)
 	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
@@ -98,27 +87,41 @@ $(EXEC): $(BINDIR) $(OBJDIR) $(OBJECTS)
 $(OBJDIR)/%.o: src/%.c $(HEADERS) | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Directories (MSYS2/Linux/macOS; used on CI and in MSYS shells)
+# SINGLE directory rule (Windows + Linux compatible)
 $(BINDIR) $(OBJDIR):
-	mkdir -p $@
-
-# ----------------------------------------------------------------------------
-# Utility targets
-# ----------------------------------------------------------------------------
-
-ifneq ($(shell which rm 2>/dev/null),)
-    RM = rm -rf
-    MKDIR = mkdir -p
+ifeq ($(OS),Windows_NT)
+	@if not exist "$(subst /,\,$(@))" mkdir "$(subst /,\,$(@))"
 else
-    RM = rmdir /s /q 2>nul || del /s /q 2>nul || true
-    MKDIR = if not exist "$(subst /,\,$@)" mkdir "$(subst /,\,$@)"
+	mkdir -p $@
 endif
 
-$(BINDIR) $(OBJDIR):
-	$(MKDIR) $@
+# ----------------------------------------------------------------------------
+# Utility targets (FIXED for Windows CMD)
+# ----------------------------------------------------------------------------
+
+# Detect shell type more reliably
+ifeq ($(OS),Windows_NT)
+    ifneq ($(shell where rm 2>/dev/null),)
+        # MSYS2/MinGW/Git Bash (has rm)
+        RM = rm -rf
+    else
+        # Pure Windows CMD
+        RM = rmdir /s /q 2>nul || del /s /q /f /q 2>nul || exit /b 0
+    endif
+else
+    # Unix-like
+    RM = rm -rf
+endif
 
 clean:
-	-$(RM) bin obj
+ifeq ($(OS),Windows_NT)
+	@if exist bin rmdir /s /q bin 2>nul
+	@if exist obj rmdir /s /q obj 2>nul
+	@echo Cleaned bin/ and obj/
+else
+	@rm -rf bin obj
+	@echo Cleaned bin/ and obj/
+endif
 
 debug: CFLAGS += -g
 debug: all

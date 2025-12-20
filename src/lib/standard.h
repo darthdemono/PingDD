@@ -4,6 +4,8 @@
 #ifndef STANDARD_H
 #define STANDARD_H
 
+#include <time.h>
+
 /* Standard C includes FIRST */
 #include <stdio.h>
 #include <stdbool.h>
@@ -28,17 +30,36 @@
 #include <ws2tcpip.h>
 #else
 #include <sys/socket.h>
-#include <arpa/inet.h>
 #include <netdb.h>
-#include <unistd.h>
 #include <sys/time.h>
 #include <netinet/in.h>
+#include <sys/select.h>
+#include <netdb.h>      /* getaddrinfo, freeaddrinfo, struct addrinfo */
+#include <netinet/in.h> /* sockaddr_in */
+#include <arpa/inet.h>  /* inet_ntop, inet_pton */
+#include <fcntl.h>      /* fcntl */
+#include <unistd.h>     /* usleep, close */
+#include <errno.h>      /* errno */
 #define CLOSESOCKET(s) close(s)
 #endif
 
 /* Application constants */
 #define NAME "PingDD"
 #define AUTHOR "Jubair Hasan (Joy)"
+
+/* Host structure (shared across modules) */
+/**
+ * @brief Host structure
+ */
+typedef struct
+{
+    char IPAddress[64];
+    char Hostname[256];
+    uint32_t ipAddress;
+    uint16_t Port;
+    int32_t Type;
+    bool HostIsIP;
+} host_t;
 
 /* Sizes */
 #define HOSTNAME_MAX_LEN 256U

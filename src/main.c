@@ -16,17 +16,24 @@
 #include <string.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <unistd.h>
 
 #ifdef _WIN32
 #include <windows.h>
-#define usleep(ms) Sleep((ms) / 1000U)
 #else
-#include <unistd.h>
 #endif
 
 /* Global interrupt flag: set by SIGINT handler, polled in main loop */
 static volatile sig_atomic_t g_interrupted = 0;
 
+static inline void delay_ms(uint32_t ms)
+{
+#ifdef _WIN32
+    Sleep(ms);
+#else
+    sleep(ms);
+#endif
+}
 /* Static function prototypes */
 static void SignalHandler(int signal);
 
@@ -149,7 +156,7 @@ int main(int argc, char *argv[])
 
         if (args.Count != -1)
         {
-            (void)usleep(50000U); /* 50 ms */
+            delay_ms(50U); /* 50 ms */
         }
     }
 

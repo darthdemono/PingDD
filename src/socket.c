@@ -13,21 +13,6 @@
 
 #include <string.h>
 
-/* Platform-specific includes */
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
-#include <sys/select.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <errno.h>
-#endif
-
 /* Static function prototypes */
 static int32_t InitializeWinsock(void);
 // static void CleanupWinsock(void);
@@ -149,7 +134,7 @@ int32_t Connect(host_t const *const host, uint32_t const timeout_ms, double *con
     int32_t client_socket = INVALID_SOCKET;
     struct sockaddr_in server_addr = {0};
     struct timeval timeout = {0};
-    timer_t timer = {0};
+    pingdd_timer_t timer = {0};
     fd_set readfds, writefds;
 
     /* Validate inputs */

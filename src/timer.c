@@ -5,7 +5,7 @@
 
 #include "timer.h"
 
-void Timer_Start(timer_t *const timer)
+void Timer_Start(pingdd_timer_t *const timer)
 {
     if (timer == NULL)
     {
@@ -22,7 +22,7 @@ void Timer_Start(timer_t *const timer)
 #endif
 }
 
-double Timer_Stop(timer_t *const timer)
+double Timer_Stop(pingdd_timer_t *const timer)
 {
     double elapsed = 0.0;
 
