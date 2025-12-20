@@ -81,16 +81,16 @@ jobs:
           path: bin/win/x86/pingdd.exe
 
       # ----- Auto-release block: only runs on tag pushes -----
-      - name: Create GitHub Release
+      - name: Create GitHub Release with asset
         if: success() && github.ref_type == 'tag'
-        id: create_release
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.ref_name }}
           name: PingDD ${{ github.ref_name }}
           body: "Automated release for tag ${{ github.ref_name }}"
-          draft: false
-          prerelease: false
+          artifacts: "bin/win/x86/pingdd.exe"
+          artifactContentType: application/octet-stream
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload exe to Release
         if: success() && github.ref_type == 'tag'
