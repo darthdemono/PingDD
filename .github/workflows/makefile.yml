@@ -92,7 +92,7 @@ jobs:
                                            -HashAlgorithm SHA256
 
           & $signtool sign /n "PingDD Development" /tr http://timestamp.digicert.com /td sha256 bin/win/pingdd.exe
-          & $signtool verify /pa /v /vap bin/win/pingdd.exe
+          & $signtool verify /pa /v bin/win/pingdd.exe
           echo "✅ Self-signed: bin/win/pingdd.exe"
 
       - name: Upload build artifact
