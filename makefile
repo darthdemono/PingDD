@@ -78,7 +78,6 @@ linux:
 # Build rules
 # ----------------------------------------------------------------------------
 
-
 # Link
 $(EXEC): $(BINDIR) $(OBJDIR) $(OBJECTS)
 	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
@@ -96,32 +95,25 @@ else
 endif
 
 # ----------------------------------------------------------------------------
-# Utility targets (FIXED for Windows CMD)
+# Utility targets (FIXED - Universal clean for MSYS2/Linux/Windows CMD)
 # ----------------------------------------------------------------------------
 
-# Detect shell type more reliably
+# Use portable commands that work everywhere
+RM = rm -rf
+MKDIR_P = mkdir -p
+
+# Override for pure Windows CMD (no bash)
 ifeq ($(OS),Windows_NT)
-    ifneq ($(shell where rm 2>/dev/null),)
-        # MSYS2/MinGW/Git Bash (has rm)
-        RM = rm -rf
-    else
-        # Pure Windows CMD
-        RM = rmdir /s /q 2>nul || del /s /q /f /q 2>nul || exit /b 0
+    ifeq ($(SHELL),cmd.exe)
+        # Pure Windows CMD - no bash available
+        RM = rmdir /s /q 2>nul || del /s /q 2>nul
+        MKDIR_P = if not exist "%1" mkdir "%1"
     endif
-else
-    # Unix-like
-    RM = rm -rf
 endif
 
 clean:
-ifeq ($(OS),Windows_NT)
-	@if exist bin rmdir /s /q bin 2>nul
-	@if exist obj rmdir /s /q obj 2>nul
-	@echo Cleaned bin/ and obj/
-else
-	@rm -rf bin obj
-	@echo Cleaned bin/ and obj/
-endif
+	$(RM) bin obj
+	@echo "Cleaned bin/ and obj/"
 
 debug: CFLAGS += -g
 debug: all
