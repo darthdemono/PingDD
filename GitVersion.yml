@@ -1,0 +1,14 @@
+mode: ContinuousDelivery
+branches:
+  main:
+    regex: ^main$
+    increment: patch
+    is-mainline: true
+  feature:
+    regex: ^features?[/-]
+    increment: minor
+  hotfix:
+    regex: ^hotfix(es)?[/-]
+    increment: patch
+ignore:
+  sha: []

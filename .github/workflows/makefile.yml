@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ["v*"] # allow tag pushes too (e.g. v1.1.1)
+    tags: ["v*"] # still handle existing tags if you ever push them
   pull_request:
     branches: [main]
 
@@ -13,12 +13,27 @@ jobs:
     runs-on: windows-latest
 
     permissions:
-      contents: write # needed to create releases
+      contents: write # needed to create tags/releases
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # important for GitVersion
 
+      # --- GitVersion: calculate version from Git history ---
+      - name: Setup GitVersion
+        uses: gittools/actions/gitversion/setup@v1
+        with:
+          versionSpec: "6.x"
+
+      - name: Run GitVersion
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@v1
+        with:
+          useConfigFile: true # expects GitVersion.yml at repo root
+
+      # --- Toolchain / build ---
       - name: Install MSYS2 & MinGW32
         uses: msys2/setup-msys2@v2
         with:
@@ -34,17 +49,10 @@ jobs:
           pwd
           ls
 
-      - name: Generate version header
+      - name: Generate version header from GitVersion
         shell: bash
         run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            RAW_TAG="${GITHUB_REF_NAME}"          # e.g. v1.1.1 or 1.1.1
-            VERSION_FULL="${RAW_TAG#v}"
-          else
-            VERSION_BASE="1.1"
-            PATCH="${GITHUB_RUN_NUMBER}"
-            VERSION_FULL="${VERSION_BASE}.${PATCH}"
-          fi
+          VERSION_FULL="${{ steps.gitversion.outputs.SemVer }}"
           echo "VERSION_FULL=${VERSION_FULL}"
           mkdir -p src/lib
           cat > src/lib/version.h <<EOF
@@ -66,35 +74,36 @@ jobs:
           make clean
           make
 
-      - name: Compute short SHA
-        id: vars
-        shell: bash
-        run: |
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-
+      # --- CI artifact for every run ---
       - name: Upload artifact (pingdd.exe)
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: pingdd-win32-${{ steps.vars.outputs.short_sha }}
+          name: pingdd-win32-${{ steps.gitversion.outputs.SemVer }}
           path: bin/win/x86/pingdd.exe
 
-      # ----- Auto-release block: only runs on tag pushes -----
-      - name: Create GitHub Release with asset
-        if: success() && github.ref_type == 'tag'
+      # --- Create tag & release only on main branch pushes ---
+      - name: Create Git tag from GitVersion
+        if: success() && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          VERSION="${{ steps.gitversion.outputs.SemVer }}"
+          TAG="v${VERSION}"
+          echo "TAG=${TAG}"
+          # Create or move tag locally
+          git tag -f "${TAG}"
+          # Push tag to origin
+          git push origin "${TAG}" --force
+
+      - name: Create or update GitHub Release with asset
+        if: success() && github.ref == 'refs/heads/main'
         uses: ncipollo/release-action@v1
         with:
-          tag: ${{ github.ref_name }}
-          name: PingDD ${{ github.ref_name }}
-          body: "Automated release for tag ${{ github.ref_name }}"
+          tag: v${{ steps.gitversion.outputs.SemVer }}
+          name: PingDD ${{ steps.gitversion.outputs.SemVer }}
+          body: "Automated release for ${{ steps.gitversion.outputs.SemVer }}"
           artifacts: "bin/win/x86/pingdd.exe"
           artifactContentType: application/octet-stream
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload exe to Release
-        if: success() && github.ref_type == 'tag'
-        uses: AButler/upload-release-assets@v3.0
-        with:
-          files: "bin/win/x86/pingdd.exe"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          skipIfReleaseExists: false
+          replacesArtifacts: true
