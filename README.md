@@ -10,7 +10,7 @@
 
 ### Prerequisites
 
-- A C++ compiler (e.g., g++)
+- A C compiler (e.g., gcc)
 - GNU Make
 - Git
 
