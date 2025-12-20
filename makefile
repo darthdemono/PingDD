@@ -2,7 +2,7 @@
 # Universal Makefile for PingDD (Windows 32-bit, Linux)
 #
 # Outputs:
-#   Windows 32-bit : bin/win/x86/pingdd.exe   (TARGET_OS=win32)
+#   Windows 32-bit : bin/win/pingdd.exe   (TARGET_OS=win32)
 #   Linux          : bin/linux/pingdd        (TARGET_OS=linux)
 #
 # Default TARGET_OS:
@@ -34,7 +34,7 @@ TARGET_OS := $(strip $(TARGET_OS))
 # ----------------------------------------------------------------------------
 # Common settings
 # ----------------------------------------------------------------------------
-CFLAGS_COMMON = -Wall -Wextra -std=c99 -Isrc/lib
+CFLAGS_COMMON = -W -Wall -Wextra -Wextra -Werror -std=c99 -Isrc/lib -fno-omit-frame-pointer
 SOURCES       = $(wildcard src/*.c)
 HEADERS       = $(wildcard src/lib/*.h)
 
@@ -54,8 +54,8 @@ ifeq ($(TARGET_OS), win32)
     CC      = i686-w64-mingw32-gcc
     CFLAGS  = $(CFLAGS_COMMON) -static
     LDFLAGS = -lws2_32
-    BINDIR  = bin/win/x86
-    OBJDIR  = obj/win/x86
+    BINDIR  = bin/win
+    OBJDIR  = obj/win
     EXEC    = $(BINDIR)/pingdd.exe
 else ifeq ($(TARGET_OS), linux)
     # Linux native
@@ -106,8 +106,19 @@ $(BINDIR) $(OBJDIR):
 # Utility targets
 # ----------------------------------------------------------------------------
 
+ifneq ($(shell which rm 2>/dev/null),)
+    RM = rm -rf
+    MKDIR = mkdir -p
+else
+    RM = rmdir /s /q 2>nul || del /s /q 2>nul || true
+    MKDIR = if not exist "$(subst /,\,$@)" mkdir "$(subst /,\,$@)"
+endif
+
+$(BINDIR) $(OBJDIR):
+	$(MKDIR) $@
+
 clean:
-	rm -rf bin obj
+	-$(RM) bin obj
 
 debug: CFLAGS += -g
 debug: all
@@ -121,7 +132,7 @@ info:
 
 help:
 	@echo "make               # Auto-detect host (Windows->win32, Linux->linux)"
-	@echo "make win32         # Windows 32-bit  -> bin/win/x86/pingdd.exe"
+	@echo "make win32         # Windows 32-bit  -> bin/win/pingdd.exe"
 	@echo "make linux         # Linux native    -> bin/linux/pingdd"
 	@echo "make clean         # Remove bin/ and obj/"
 	@echo "make debug         # Build with debug info"

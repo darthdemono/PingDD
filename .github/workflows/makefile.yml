@@ -72,6 +72,32 @@ jobs:
           echo "Building with make..."
           make clean
           make
+      # --- NEW: Self-sign the executable ---
+      - name: Self-sign executable
+        if: success() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Create self-signed code signing certificate
+          $cert = New-SelfSignedCertificate -Subject "CN=PingDD Development" `
+                                           -Type CodeSigningCert `
+                                           -CertStoreLocation Cert:\CurrentUser\My `
+                                           -KeyLength 2048 `
+                                           -KeyAlgorithm RSA `
+                                           -HashAlgorithm SHA256
+
+          # Sign with timestamp server
+          signtool sign /n "PingDD Development" `
+                       /tr http://timestamp.digicert.com `
+                       /td sha256 `
+                       /fd sha256 `
+                       bin/win/pingdd.exe
+
+          # Verify signature
+          signtool verify /pa /v bin/win/pingdd.exe
+
+          echo "✅ Executable self-signed successfully"
+          echo "SignTool output:"
+          signtool verify /pa /v bin/win/pingdd.exe
 
       # --- CI artifact for every run ---
       - name: Upload artifact (pingdd.exe)
@@ -79,7 +105,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pingdd-win32-${{ steps.gitversion.outputs.SemVer }}
-          path: bin/win/x86/pingdd.exe
+          path: bin/win/pingdd.exe
 
       # --- Create tag & release only on main branch pushes ---
       - name: Create Git tag from GitVersion
@@ -101,7 +127,7 @@ jobs:
           tag: v${{ steps.gitversion.outputs.SemVer }}
           name: PingDD ${{ steps.gitversion.outputs.SemVer }}
           body: "Automated release for ${{ steps.gitversion.outputs.SemVer }}"
-          artifacts: "bin/win/x86/pingdd.exe"
+          artifacts: "bin/win/pingdd.exe"
           artifactContentType: application/octet-stream
           token: ${{ secrets.GITHUB_TOKEN }}
           skipIfReleaseExists: false
