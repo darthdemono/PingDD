@@ -39,6 +39,6 @@ int32_t GetSuccessfulConnectionString(host_t const *const host,
     }
 
     return snprintf(str, str_size,
-                    "Connected to %s: time=%.2fms protocol=TCP port=%u\n",
+                    "Connected to %s: time=%.4fms protocol=TCP port=%u\n",
                     IPAddressString(host), time * 1000.0, host->Port);
 }

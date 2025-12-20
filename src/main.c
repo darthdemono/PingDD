@@ -127,7 +127,7 @@ int main(int argc, char *argv[])
             FormattedPrint(PRINT_WHITE, ": time=");
 
             /* more accurate RTT: adjust precision here if needed */
-            (void)snprintf(rtt_buf, sizeof(rtt_buf), "%.2fms ",
+            (void)snprintf(rtt_buf, sizeof(rtt_buf), "%.4fms ",
                            rtt * 1000.0);
             FormattedPrint(PRINT_GREEN, rtt_buf);
 
@@ -199,17 +199,17 @@ int main(int argc, char *argv[])
         ResetColor();
 
         (void)printf("        Minimum = ");
-        (void)snprintf(buf, sizeof(buf), "%.2fms",
+        (void)snprintf(buf, sizeof(buf), "%.4fms",
                        stats.Minimum * 1000.0);
         FormattedPrint(PRINT_BLUE, buf);
 
         (void)printf(" , Maximum = ");
-        (void)snprintf(buf, sizeof(buf), "%.2fms",
+        (void)snprintf(buf, sizeof(buf), "%.4fms",
                        stats.Maximum * 1000.0);
         FormattedPrint(PRINT_BLUE, buf);
 
         (void)printf(" , Average = ");
-        (void)snprintf(buf, sizeof(buf), "%.2fms",
+        (void)snprintf(buf, sizeof(buf), "%.5fms",
                        Stats_Average(&stats) * 1000.0);
         FormattedPrint(PRINT_BLUE, buf);
         (void)printf("\n");

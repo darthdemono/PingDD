@@ -20,12 +20,12 @@ static pcc_t const string_table[STRING_ID_COUNT] = {
 
     [STRING_ID_CONNECT_INFO_FULL] = "Connecting to %s on TCP %d:\n",
     [STRING_ID_CONNECT_INFO_IP] = "[%s] ",
-    [STRING_ID_CONNECT_SUCCESS] = "Connected to %s: time=%.2fms protocol=TCP port=%d\n",
+    [STRING_ID_CONNECT_SUCCESS] = "Connected to %s: time=%.4fms protocol=TCP port=%d\n",
 
     [STRING_ID_STATS] = "Connection statistics:\n"
                         "        Attempted = %lu , Connected = %lu , Failed = %lu ( %.2f%% )\n"
                         "Approximate connection times:\n"
-                        "        Minimum = %.2fms , Maximum = %.2fms , Average = %.2fms\n",
+                        "        Minimum = %.4fms , Maximum = %.4fms , Average = %.5fms\n",
 
     [STRING_ID_CONNECTION_TIMEOUT] = "Connection timeout"};
 
