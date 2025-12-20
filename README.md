@@ -11,7 +11,7 @@
 ### Prerequisites
 
 - A C++ compiler (e.g., g++)
-- CMake or GNU Make
+- GNU Make
 - Git
 
 ### Cloning the Repository
@@ -26,15 +26,7 @@ cd pingdd
 #### Using GNU Make
 
 ```bash
-make
-```
-
-#### Using CMake
-
-```bash
-mkdir build
-cd build
-cmake ..
+make clean
 make
 ```
 
