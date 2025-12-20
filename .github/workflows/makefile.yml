@@ -64,28 +64,58 @@ jobs:
           make clean
           make
 
-      - name: Self-sign executable
-        if: success()
+      - name: Self-sign executable (Windows SDK)
+        if: success() && runner.os == 'Windows'
         shell: pwsh
         run: |
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $vsPath = & $vswhere -latest -property installationPath
-          $env:PATH += ";${vsPath}\Common7\Tools"
+          # Install Windows SDK 10 (includes SignTool) via Chocolatey
+          choco install windows-sdk-10.0 -y --force
 
-          signtool /? | Select-String "SignTool"
+          # Refresh environment
+          refreshenv
 
+          # Verify SignTool from multiple possible locations
+          $signToolPaths = @(
+            "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe",
+            "${env:ProgramFiles(x86)}\Windows Kits\10\bin\x64\signtool.exe",
+            "${env:ProgramFiles(x86)}\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.8 Tools\x64\signtool.exe"
+          )
+
+          $signtool = $null
+          foreach ($path in $signToolPaths) {
+            if (Test-Path $path) {
+              $signtool = $path
+              Write-Output "✅ Found SignTool: $signtool"
+              break
+            }
+          }
+
+          if (-not $signtool) {
+            throw "SignTool not found in expected locations"
+          }
+
+          # Add to PATH
+          $env:PATH += ";$($signtool | Split-Path -Parent)"
+
+          # Test
+          & $signtool /?
+
+          # Create self-signed cert
           $cert = New-SelfSignedCertificate -Subject "CN=PingDD Development" `
                                            -Type CodeSigningCert `
                                            -CertStoreLocation Cert:\CurrentUser\My `
                                            -KeyLength 2048 `
                                            -HashAlgorithm SHA256
 
-          signtool sign /n "PingDD Development" `
-                       /tr http://timestamp.digicert.com `
-                       /td sha256 `
-                       bin/win/x86/pingdd.exe
+          # Sign
+          & $signtool sign /n "PingDD Development" `
+                          /tr http://timestamp.digicert.com `
+                          /td sha256 `
+                          bin/win/x86/pingdd.exe
 
-          signtool verify /pa bin/win/x86/pingdd.exe
+          # Verify
+          & $signtool verify /pa bin/win/x86/pingdd.exe
+
           echo "✅ Self-signed successfully"
 
       - name: Upload build artifact
