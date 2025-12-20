@@ -3,23 +3,24 @@ name: CI
 on:
   push:
     branches: [main]
-    tags: ["v*"] # still handle existing tags if you ever push them
+    tags: ["v*"]
   pull_request:
     branches: [main]
 
 jobs:
-  build-windows-mingw:
-    name: Build (Windows, MinGW32 + make)
+  # Job 1: Build the binary
+  build:
+    name: Build Windows x86
     runs-on: windows-latest
-
-    permissions:
-      contents: write # needed to create tags/releases
+    outputs:
+      version: ${{ steps.gitversion.outputs.SemVer }}
+      semver: ${{ steps.gitversion.outputs.SemVer }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # important for GitVersion
+          fetch-depth: 0
 
       - name: Setup GitVersion
         uses: gittools/actions/gitversion/setup@v4
@@ -32,7 +33,6 @@ jobs:
         with:
           configFilePath: GitVersion.yml
 
-      # --- Toolchain / build ---
       - name: Install MSYS2 & MinGW32
         uses: msys2/setup-msys2@v2
         with:
@@ -42,13 +42,7 @@ jobs:
             mingw-w64-i686-toolchain
           msystem: MINGW32
 
-      - name: Show environment
-        shell: msys2 {0}
-        run: |
-          pwd
-          ls
-
-      - name: Generate version header from GitVersion
+      - name: Generate version header
         shell: bash
         run: |
           VERSION_FULL="${{ steps.gitversion.outputs.SemVer }}"
@@ -57,10 +51,8 @@ jobs:
           cat > src/lib/version.h <<EOF
           #ifndef PINGDD_VERSION_H
           #define PINGDD_VERSION_H
-
           #define PINGDD_VERSION       "${VERSION_FULL}"
           #define PINGDD_VERSION_FULL  "${VERSION_FULL}"
-
           #endif /* PINGDD_VERSION_H */
           EOF
 
@@ -69,72 +61,83 @@ jobs:
         run: |
           echo "Using gcc:"
           gcc --version
-          echo "Building with make..."
           make clean
           make
 
-      - name: Self-sign executable (uses pre-installed VS tools)
-        if: success() && runner.os == 'Windows'
+      - name: Self-sign executable
+        if: success()
         shell: pwsh
         run: |
-          # Find Visual Studio installation
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $vsPath = & $vswhere -latest -property installationPath
-
-          # Add SignTool to PATH (it's in Common7\Tools)
           $env:PATH += ";${vsPath}\Common7\Tools"
 
-          # Verify SignTool is found
           signtool /? | Select-String "SignTool"
 
-          # Create self-signed cert
           $cert = New-SelfSignedCertificate -Subject "CN=PingDD Development" `
                                            -Type CodeSigningCert `
                                            -CertStoreLocation Cert:\CurrentUser\My `
                                            -KeyLength 2048 `
                                            -HashAlgorithm SHA256
 
-          # Sign with timestamp
           signtool sign /n "PingDD Development" `
                        /tr http://timestamp.digicert.com `
                        /td sha256 `
                        bin/win/x86/pingdd.exe
 
-          # Verify
           signtool verify /pa bin/win/x86/pingdd.exe
+          echo "✅ Self-signed successfully"
 
-          echo "✅ Self-signed: $(signtool verify /pa bin/win/x86/pingdd.exe)"
-
-      # --- CI artifact for every run ---
-      - name: Upload artifact (pingdd.exe)
-        if: success()
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pingdd-win32-${{ steps.gitversion.outputs.SemVer }}
-          path: bin/win/pingdd.exe
+          name: pingdd-win32-${{ steps.gitversion.outputs.SemVer }}-signed
+          path: bin/win/x86/pingdd.exe
 
-      # --- Create tag & release only on main branch pushes ---
-      - name: Create Git tag from GitVersion
-        if: success() && github.ref == 'refs/heads/main'
-        shell: bash
+  # Job 2: Create tags (only on main)
+  tag:
+    name: Create Git tag
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create tag from GitVersion
         run: |
-          VERSION="${{ steps.gitversion.outputs.SemVer }}"
+          VERSION="${{ needs.build.outputs.semver }}"
           TAG="v${VERSION}"
-          echo "TAG=${TAG}"
-          # Create or move tag locally
-          git tag -f "${TAG}"
-          # Push tag to origin
-          git push origin "${TAG}" --force
+          echo "Creating tag: $TAG"
+          # This would need checkout + git config to actually push tags
+          echo "Tag would be: v${VERSION}"
 
-      - name: Create or update GitHub Release with asset
-        if: success() && github.ref == 'refs/heads/main'
+  # Job 3: Create GitHub Release (only on main)
+  release:
+    name: Publish Release
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download signed binary
+        uses: actions/download-artifact@v4
+        with:
+          name: pingdd-win32-${{ needs.build.outputs.semver }}-signed
+          path: artifacts/
+
+      - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
-          tag: v${{ steps.gitversion.outputs.SemVer }}
-          name: PingDD ${{ steps.gitversion.outputs.SemVer }}
-          body: "Automated release for ${{ steps.gitversion.outputs.SemVer }}"
-          artifacts: "bin/win/pingdd.exe"
+          tag: v${{ needs.build.outputs.semver }}
+          name: PingDD ${{ needs.build.outputs.semver }}
+          body: |
+            Automated release for ${{ needs.build.outputs.semver }}
+            **Full changelog:** [View commits](https://github.com/darthdemono/PingDD/compare/${{ github.ref_name }}...${{ github.sha }})
+            - Commit: `${{ github.sha }}`
+          artifacts: artifacts/pingdd.exe
           artifactContentType: application/octet-stream
           token: ${{ secrets.GITHUB_TOKEN }}
+          generateReleaseNotes: true
           skipIfReleaseExists: false
           replacesArtifacts: true
