@@ -111,10 +111,10 @@ jobs:
           & $signtool sign /n "PingDD Development" `
                           /tr http://timestamp.digicert.com `
                           /td sha256 `
-                          bin/win/x86/pingdd.exe
+                          bin/win/pingdd.exe
 
           # Verify
-          & $signtool verify /pa bin/win/x86/pingdd.exe
+          & $signtool verify /pa bin/win/pingdd.exe
 
           echo "✅ Self-signed successfully"
 
