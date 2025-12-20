@@ -60,6 +60,25 @@ endif
 OBJECTS = $(SOURCES:src/%.c=$(OBJDIR)/%.o)
 
 # ----------------------------------------------------------------------------
+# Portable commands (detect environment)
+# ----------------------------------------------------------------------------
+ifeq ($(OS),Windows_NT)
+  ifneq ($(findstring /,$(SHELL)),)
+    # MSYS2/Git Bash (has Unix tools)
+    RM      = rm -rf
+    MKDIR_P = mkdir -p
+  else
+    # Pure Windows CMD
+    RM      = rmdir /s /q 2>nul || del /s /q 2>nul
+    MKDIR_P = if not exist "$(subst /,\,$(@))" mkdir "$(subst /,\,$(@))"
+  endif
+else
+  # Linux/Unix
+  RM      = rm -rf
+  MKDIR_P = mkdir -p
+endif
+
+# ----------------------------------------------------------------------------
 # Phony targets
 # ----------------------------------------------------------------------------
 .PHONY: all clean win32 linux debug info help
@@ -75,42 +94,24 @@ linux:
 	$(MAKE) TARGET_OS=linux
 
 # ----------------------------------------------------------------------------
-# Build rules
+# Build rules (SIMPLIFIED - no complex conditionals in rules)
 # ----------------------------------------------------------------------------
+
+# Ensure directories exist (SIMPLE portable rule)
+$(BINDIR) $(OBJDIR):
+	$(MKDIR_P) $@
 
 # Link
 $(EXEC): $(BINDIR) $(OBJDIR) $(OBJECTS)
 	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
 
 # Compile
-$(OBJDIR)/%.o: src/%.c $(HEADERS) | $(OBJDIR)
+$(OBJDIR)/%.o: src/%.c $(HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# SINGLE directory rule (Windows + Linux compatible)
-$(BINDIR) $(OBJDIR):
-ifeq ($(OS),Windows_NT)
-	@if not exist "$(subst /,\,$(@))" mkdir "$(subst /,\,$(@))"
-else
-	mkdir -p $@
-endif
-
 # ----------------------------------------------------------------------------
-# Utility targets (FIXED - Universal clean for MSYS2/Linux/Windows CMD)
+# Utility targets
 # ----------------------------------------------------------------------------
-
-# Use portable commands that work everywhere
-RM = rm -rf
-MKDIR_P = mkdir -p
-
-# Override for pure Windows CMD (no bash)
-ifeq ($(OS),Windows_NT)
-    ifeq ($(SHELL),cmd.exe)
-        # Pure Windows CMD - no bash available
-        RM = rmdir /s /q 2>nul || del /s /q 2>nul
-        MKDIR_P = if not exist "%1" mkdir "%1"
-    endif
-endif
-
 clean:
 	$(RM) bin obj
 	@echo "Cleaned bin/ and obj/"

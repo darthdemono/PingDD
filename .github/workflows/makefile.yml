@@ -61,7 +61,7 @@ jobs:
           echo "Using gcc:"
           gcc --version
           make clean
-          make
+          make win32
 
       - name: Self-sign executable (Windows SDK)
         if: success() && runner.os == 'Windows'
