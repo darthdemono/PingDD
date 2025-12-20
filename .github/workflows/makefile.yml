@@ -72,32 +72,38 @@ jobs:
           echo "Building with make..."
           make clean
           make
-      # --- NEW: Self-sign the executable ---
-      - name: Self-sign executable
+
+      - name: Self-sign executable (uses pre-installed VS tools)
         if: success() && runner.os == 'Windows'
         shell: pwsh
         run: |
-          # Create self-signed code signing certificate
+          # Find Visual Studio installation
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsPath = & $vswhere -latest -property installationPath
+
+          # Add SignTool to PATH (it's in Common7\Tools)
+          $env:PATH += ";${vsPath}\Common7\Tools"
+
+          # Verify SignTool is found
+          signtool /? | Select-String "SignTool"
+
+          # Create self-signed cert
           $cert = New-SelfSignedCertificate -Subject "CN=PingDD Development" `
                                            -Type CodeSigningCert `
                                            -CertStoreLocation Cert:\CurrentUser\My `
                                            -KeyLength 2048 `
-                                           -KeyAlgorithm RSA `
                                            -HashAlgorithm SHA256
 
-          # Sign with timestamp server
+          # Sign with timestamp
           signtool sign /n "PingDD Development" `
                        /tr http://timestamp.digicert.com `
                        /td sha256 `
-                       /fd sha256 `
-                       bin/win/pingdd.exe
+                       bin/win/x86/pingdd.exe
 
-          # Verify signature
-          signtool verify /pa /v bin/win/pingdd.exe
+          # Verify
+          signtool verify /pa bin/win/x86/pingdd.exe
 
-          echo "✅ Executable self-signed successfully"
-          echo "SignTool output:"
-          signtool verify /pa /v bin/win/pingdd.exe
+          echo "✅ Self-signed: $(signtool verify /pa bin/win/x86/pingdd.exe)"
 
       # --- CI artifact for every run ---
       - name: Upload artifact (pingdd.exe)
