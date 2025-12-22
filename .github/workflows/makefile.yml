@@ -233,9 +233,9 @@ jobs:
           name: pingdd-${{ matrix.distro_name }}-${{ steps.gitversion.outputs.SemVer }}
           path: bin/linux/pingdd-${{ matrix.distro_name }}
 
-  # Job 3: Create Release
+  # Job 3: Create Release + Publish to WinGet
   release:
-    name: Publish Release
+    name: Publish Release & WinGet
     needs: [check-src-changed, build-windows, build-linux]
     if: |
       (needs.check-src-changed.outputs.src_changed == 'true' && github.ref == 'refs/heads/main') ||
@@ -282,11 +282,31 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
-          # Move all artifacts to a flat structure for release
-          find artifacts -type f -name "pingdd*" -exec cp {} release-assets/ \;
-          ls -lah release-assets/
+
+          # Windows: direct copy as pingdd.exe
+          cp artifacts/pingdd-win32-*/pingdd.exe release-assets/pingdd.exe
+          echo "✅ Copied pingdd.exe (Windows)"
+
+          # Linux: create versioned directories with clean 'pingdd' name
+          VERSION="${{ needs.build-windows.outputs.semver }}"
+          for artifact_dir in artifacts/pingdd-*-*/; do
+            if [[ $artifact_dir == *"win32"* ]]; then
+              continue
+            fi
+            
+            # Extract distro_name from artifact name (pingdd-ubuntu-24.04-1.0.6/ → ubuntu-24.04)
+            distro_full=$(basename "$artifact_dir" | sed 's/pingdd-//; s/-${VERSION}$//')
+            
+            target_dir="release-assets/${distro_full}-${VERSION}"
+            mkdir -p "$target_dir"
+            cp "$artifact_dir"pingdd* "$target_dir/pingdd"
+            echo "✅ Created $target_dir/pingdd"
+          done
+
+          ls -lahR release-assets/
 
       - name: Create GitHub Release
+        id: release
         uses: ncipollo/release-action@v1
         with:
           tag: v${{ needs.build-windows.outputs.semver }}
@@ -308,7 +328,6 @@ jobs:
 
             ### Changes
             ${{ steps.changelog.outputs.commits }}
-
           artifacts: "release-assets/*"
           artifactContentType: application/octet-stream
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -317,3 +336,13 @@ jobs:
           replacesArtifacts: true
           draft: false
           prerelease: false
+
+      # Publish to WinGet (only after GitHub release is created)
+      - name: Publish to WinGet
+        if: success()
+        uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: DarthDemono.PingDD
+          version: ${{ needs.build-windows.outputs.semver }}
+          token: ${{ secrets.WINGET_TOKEN }}
+          installers-regex: 'pingdd\.exe$'
