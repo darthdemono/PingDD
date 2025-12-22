@@ -1,11 +1,12 @@
 name: Publish to WinGet
-
 on:
   release:
-    types: [released]
+    types: [published, released]
+  workflow_dispatch:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   publish:
@@ -13,8 +14,5 @@ jobs:
     steps:
       - uses: vedantmgoyal9/winget-releaser@main
         with:
-          identifier: DarthDemono.PingDD # your winget PackageIdentifier
-          token: ${{ secrets.WINGET_TOKEN }} # classic PAT with public_repo
-          # optional but useful:
-          # installers-regex: '\.exe$'            # if your release has multiple assets
-          # max-versions-to-keep: 5
+          identifier: DarthDemono.PingDD
+          token: ${{ secrets.WINGET_TOKEN }}
