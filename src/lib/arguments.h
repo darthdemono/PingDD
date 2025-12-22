@@ -1,5 +1,5 @@
 /**
- * @file arguments.h - FIXED (no duplicate defines)
+ * @file arguments.h
  */
 #ifndef ARGUMENTS_H
 #define ARGUMENTS_H
