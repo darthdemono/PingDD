@@ -337,7 +337,7 @@ jobs:
 
       - name: Publish to WinGet
         if: success()
-        uses: vedantmgoyal9/winget-releaser@v2
+        uses: vedantmgoyal9/winget-releaser@main
         with:
           identifier: DarthDemono.PingDD
           version: ${{ needs.build-windows.outputs.semver }}

@@ -1,5 +1,5 @@
 /**
- * @file host.h - CROSS-PLATFORM Windows/Linux MISRA C
+ * @file host.h
  */
 #ifndef HOST_H
 #define HOST_H
