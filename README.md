@@ -1,10 +1,14 @@
+<p align="center">
+  <img src="PingDD Social Preview.png" alt="PingDD Social Preview">
+</p>
+
 # PingDD
 
 <p align="center">
-  <img src="Screenshot.png" alt="PingDD">
+  <img src="Screenshot.png" alt="PingDD Screenshot">
 </p>
 
-**PingDD** is a ping tool for TCP port checking. This utility is designed to help network administrators and enthusiasts test the availability and responsiveness of specific TCP ports on remote servers. It's practically a revival of Paping. 
+**PingDD** is a cross-platform ping tool made in C for TCP port checking. This utility is designed to help network administrators and enthusiasts test the availability and responsiveness of specific TCP ports on remote servers. It's practically a revival of Paping. 
 
 ## Installation
 
