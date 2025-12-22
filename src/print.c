@@ -1,6 +1,6 @@
 /**
  * @file print.c
- * @brief Terminal‑palette colored output (ANSI, cross‑platform, MISRA‑style)
+ * @brief Terminal‑palette colored output (ANSI, cross‑platform)
  */
 
 #include "print.h"

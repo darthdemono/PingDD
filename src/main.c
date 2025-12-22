@@ -1,8 +1,14 @@
 /**
  * @file main.c
- * @brief PingDD main entry point - MISRA C style
+ * @brief PingDD main entry point
  */
-
+/**
+ * @file main.c
+ * @brief Main file for PingDD application
+ * @author Jubair Hasan (Joy)
+ * @version 1.0.0
+ * @date 2025-12-19
+ */
 #include "standard.h"
 #include "socket.h"
 #include "stats.h"
