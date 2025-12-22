@@ -23,12 +23,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2 # Get last 2 commits for diff
+          fetch-depth: 2
 
       - name: Check if src/ changed
         id: changes
         run: |
-          # Get changed files between last two commits (or since branch start)
           if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
             CHANGED_FILES=$(git diff --name-only HEAD~1)
           else
@@ -38,7 +37,6 @@ jobs:
           echo "Changed files:"
           echo "$CHANGED_FILES"
 
-          # Check if any src/ files changed
           if echo "$CHANGED_FILES" | grep -q '^src/'; then
             echo "src_changed=true" >> $GITHUB_OUTPUT
             echo "✅ Source files changed - will create release"
@@ -143,7 +141,7 @@ jobs:
           name: pingdd-win32-${{ steps.gitversion.outputs.SemVer }}-signed
           path: bin/win/pingdd.exe
 
-  # Job 2: Multi-Distro Linux
+  # Job 2: Multi-Distro Linux (FIXED)
   build-linux:
     name: Build Linux (${{ matrix.distro_name }})
     runs-on: ubuntu-latest
@@ -207,21 +205,23 @@ jobs:
           docker run --rm \
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace \
+            --network=host \
             ${{ matrix.distro }} \
             /bin/sh -c '
-              # Install build tools per distro
-              if command -v apk >/dev/null 2>&1; then
+              # Update package lists first (fixes network/mirror issues)
+              if command -v apt-get >/dev/null 2>&1; then
+                apt-get update -qq || apt-get update -qq --fix-missing || true
+                apt-get install -y --no-install-recommends gcc make libc6-dev
+              elif command -v apk >/dev/null 2>&1; then
                 apk add --no-cache gcc musl-dev make
               elif command -v dnf >/dev/null 2>&1; then
                 dnf install -y gcc make glibc-devel
               elif command -v yum >/dev/null 2>&1; then
                 yum install -y gcc make glibc-devel
-              else
-                apt-get update && apt-get install -y gcc make libc6-dev
               fi
 
               echo "GCC version:"
-              gcc --version
+              gcc --version || echo "GCC not found, retrying install..."
 
               make clean
               make linux EXEC_SUFFIX="-${{ matrix.distro_name }}"
@@ -253,15 +253,13 @@ jobs:
       - name: Get commit history since last release
         id: changelog
         run: |
-          # Get previous tag (last release) or fallback to main~1
           PREV_TAG=$(git describe --tags --abbrev=0 $(git rev-list --tags --max-count=1) 2>/dev/null || echo "")
           if [ -n "$PREV_TAG" ]; then
             git log --pretty=format:"- %s (%an)" $PREV_TAG..HEAD > commits.txt
           else
-            git log --pretty=format:"- %s (%an)" HEAD~10..HEAD > commits.txt  # Last 10 commits
+            git log --pretty=format:"- %s (%an)" HEAD~10..HEAD > commits.txt
           fi
 
-          # Read commits for release body
           COMMITS=$(cat commits.txt)
           echo "commits<<EOF" >> $GITHUB_OUTPUT
           echo "$COMMITS" >> $GITHUB_OUTPUT
@@ -295,7 +293,7 @@ jobs:
             fi
             
             # Extract distro_name from artifact name (pingdd-ubuntu-24.04-1.0.6/ → ubuntu-24.04)
-            distro_full=$(basename "$artifact_dir" | sed 's/pingdd-//; s/-${VERSION}$//')
+            distro_full=$(basename "$artifact_dir" | sed "s/pingdd-//; s/-$VERSION$//")
             
             target_dir="release-assets/${distro_full}-${VERSION}"
             mkdir -p "$target_dir"
@@ -337,7 +335,6 @@ jobs:
           draft: false
           prerelease: false
 
-      # Publish to WinGet (only after GitHub release is created)
       - name: Publish to WinGet
         if: success()
         uses: vedantmgoyal9/winget-releaser@v2
