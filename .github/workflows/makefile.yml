@@ -126,13 +126,13 @@ jobs:
           }
           $env:PATH += ";$($signtool | Split-Path -Parent)"
 
-          $cert = New-SelfSignedCertificate -Subject "CN=PingDD Development" `
+          $cert = New-SelfSignedCertificate -Subject "CN=DarthDemono" `
                                            -Type CodeSigningCert `
                                            -CertStoreLocation Cert:\CurrentUser\My `
                                            -KeyLength 2048 `
                                            -HashAlgorithm SHA256
 
-          & $signtool sign /n "PingDD Development" /tr http://timestamp.digicert.com /td sha256 bin/win/pingdd.exe
+          & $signtool sign /n "DarthDemono" /tr http://timestamp.digicert.com /td sha256 bin/win/pingdd.exe
           echo "✅ Self-signed: bin/win/pingdd.exe"
 
       - name: Upload Windows artifact
