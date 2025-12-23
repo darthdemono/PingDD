@@ -1,5 +1,5 @@
 /**
- * @file print.h - MISRA C compliant
+ * @file print.h
  */
 #ifndef PRINT_H
 #define PRINT_H

@@ -326,6 +326,7 @@ jobs:
 
             ### Changes
             ${{ steps.changelog.outputs.commits }}
+
           artifacts: "release-assets/*"
           artifactContentType: application/octet-stream
           token: ${{ secrets.GITHUB_TOKEN }}
