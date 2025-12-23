@@ -1,5 +1,5 @@
 /**
- * @file gettimeofday.h - FIXED
+ * @file gettimeofday.h
  */
 #ifndef GETTIMEOFDAY_H
 #define GETTIMEOFDAY_H
