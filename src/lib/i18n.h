@@ -1,9 +1,7 @@
 /**
  * @file i18n.h
- * @brief MISRA C compliant internationalization interface for PingDD
+ * @brief  internationalization interface for PingDD
  * @author Jubair Hasan (Joy)
- * @version 1.0.0
- * @date 2025-12-19
  */
 
 #ifndef I18N_H

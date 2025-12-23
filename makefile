@@ -63,7 +63,7 @@ else ifeq ($(TARGET_OS), linux)
     BINDIR  = bin/linux
     OBJDIR  = obj/linux
     # NOTE: add suffix into filename
-    EXEC    = $(BINDIR)/pingdd
+    EXEC    = $(BINDIR)/pingdd$(EXEC_SUFFIX)
 else
     $(error Unknown TARGET_OS '$(TARGET_OS)' (use win32, linux))
 endif

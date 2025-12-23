@@ -206,9 +206,10 @@ jobs:
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace \
             --network=host \
+            -e EXEC_SUFFIX="-${{ matrix.distro_name }}" \
             ${{ matrix.distro }} \
             /bin/sh -c '
-              # Update package lists first (fixes network/mirror issues)
+              # Update package lists first
               if command -v apt-get >/dev/null 2>&1; then
                 apt-get update -qq || apt-get update -qq --fix-missing || true
                 apt-get install -y --no-install-recommends gcc make libc6-dev
@@ -224,7 +225,7 @@ jobs:
               gcc --version || echo "GCC not found, retrying install..."
 
               make clean
-              make linux EXEC_SUFFIX="-${{ matrix.distro_name }}"
+              make linux
             '
 
       - name: Upload ${{ matrix.distro_name }} artifact
@@ -285,22 +286,29 @@ jobs:
           cp artifacts/pingdd-win32-*/pingdd.exe release-assets/pingdd.exe
           echo "✅ Copied pingdd.exe (Windows)"
 
-          # Linux: create versioned directories with clean 'pingdd' name
+          # Linux: create distro directories with clean 'pingdd' name (no version in path)
           VERSION="${{ needs.build-windows.outputs.semver }}"
-          for artifact_dir in artifacts/pingdd-*-*/; do
+          for artifact_dir in artifacts/pingdd-*-${VERSION}/; do
             if [[ $artifact_dir == *"win32"* ]]; then
               continue
             fi
             
-            # Extract distro_name from artifact name (pingdd-ubuntu-24.04-1.0.6/ → ubuntu-24.04)
-            distro_full=$(basename "$artifact_dir" | sed "s/pingdd-//; s/-$VERSION$//")
+            # Extract distro name from artifact directory
+            # Example: artifacts/pingdd-ubuntu-24.04-1.0.6/ → ubuntu-24.04
+            artifact_basename=$(basename "$artifact_dir")
+            distro_name="${artifact_basename#pingdd-}"          # Remove 'pingdd-' prefix
+            distro_name="${distro_name%-${VERSION}}"             # Remove version suffix
             
-            target_dir="release-assets/${distro_full}-${VERSION}"
+            # Create target directory WITHOUT version
+            target_dir="release-assets/${distro_name}"
             mkdir -p "$target_dir"
-            cp "$artifact_dir"pingdd* "$target_dir/pingdd"
+            
+            # Copy and rename binary to clean 'pingdd' name
+            cp "$artifact_dir"pingdd-* "$target_dir/pingdd"
             echo "✅ Created $target_dir/pingdd"
           done
 
+          echo "=== Final release structure ==="
           ls -lahR release-assets/
 
       - name: Create GitHub Release
@@ -335,12 +343,3 @@ jobs:
           replacesArtifacts: true
           draft: false
           prerelease: false
-
-      - name: Publish to WinGet
-        if: success() && startsWith(github.ref, 'refs/tags/')
-        uses: vedantmgoyal9/winget-releaser@main
-        with:
-          identifier: DarthDemono.PingDD
-          version: ${{ needs.build-windows.outputs.semver }}
-          token: ${{ secrets.WINGET_TOKEN }}
-          installers-regex: 'pingdd\.exe$'
