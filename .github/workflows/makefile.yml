@@ -336,7 +336,7 @@ jobs:
           prerelease: false
 
       - name: Publish to WinGet
-        if: success()
+        if: success() && startsWith(github.ref, 'refs/tags/')
         uses: vedantmgoyal9/winget-releaser@main
         with:
           identifier: DarthDemono.PingDD
