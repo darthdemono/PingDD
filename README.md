@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="pic/icon/PingDD Icon.png" alt="PingDD Icon">
+  <img src="pic/icon/PingDD Icon Small.png" alt="PingDD Icon">
 </p>
 
 # PingDD
