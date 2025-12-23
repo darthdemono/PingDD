@@ -1,43 +1,49 @@
 <p align="center">
-  <img src="PingDD Social Preview.png" alt="PingDD Social Preview">
+  <img src="pic/icon/PingDD Icon.png" alt="PingDD Icon">
 </p>
 
 # PingDD
 
-<p align="center">
-  <img src="Screenshot.png" alt="PingDD Screenshot">
-</p>
+**PingDD** is a cross-platform ping tool made in C for TCP port checking. This tool is designed to help network administrators and enthusiasts test the availability and responsiveness of specific TCP ports on remote servers.
 
-**PingDD** is a cross-platform ping tool made in C for TCP port checking. This utility is designed to help network administrators and enthusiasts test the availability and responsiveness of specific TCP ports on remote servers. It's practically a revival of Paping. 
+<p align="center">
+  <img src="pic/github/Screenshot.png" alt="PingDD Screenshot">
+</p>
 
 ## Installation
 
-### Prerequisites
+### Installation on Windows
 
-- A C compiler (e.g., gcc)
-- GNU Make
-- Git
+#### Winget
 
-### Cloning the Repository
+This tool can be downloaded using [Winget](https://learn.microsoft.com/en-us/windows/package-manager/).
+
+[Winget](https://learn.microsoft.com/en-us/windows/package-manager/) will automatically install this tool and add it to [%PATH%](https://en.wikipedia.org/wiki/PATH_(variable)).
+
+```bash
+winget install -e --id DarthDemono.PingDD
+```
+
+### Installation on Linux
+
+#### Compilation from Source
+
+- This tool can be compiled from source if your Operating System is not available in the release. 
 
 ```bash
 git clone https://github.com/darthdemono/pingdd.git
 cd pingdd
-```
-
-### Building the Project
-
-#### Using GNU Make
-
-```bash
 make clean
 make
 ```
 
-## Usage
+- Then it can be added to [%PATH%](https://en.wikipedia.org/wiki/PATH_(variable)).
+  - [Follow this tutorial, if you don't know how to do it.](https://www.sysadmit.com/2016/06/linux-anadir-ruta-al-path.html)
+
+## Usage 
 
 ```bash
-./pingdd <hostname> -p <port> -c <time> -t [timeout]
+pingdd <hostname> -p <port> -c <time> -t [timeout]
 ```
 
 - `hostname`: The address of the server you want to test.
@@ -48,7 +54,7 @@ make
 ### Example
 
 ```bash
-./pingdd example.com -p 80 -c 100
+pingdd example.com -p 80 -c 100
 ```
 
 ## Contributing
