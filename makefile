@@ -28,14 +28,6 @@ CFLAGS_COMMON = -W -Wall -Wextra -Werror -std=c99 -Isrc/lib -fno-omit-frame-poin
 SOURCES       = $(wildcard src/*.c)
 HEADERS       = $(wildcard src/lib/*.h)
 
-# Defaults (overridden per OS)
-CC      =
-CFLAGS  =
-LDFLAGS =
-BINDIR  =
-OBJDIR  =
-EXEC    =
-
 # ----------------------------------------------------------------------------
 # Per-OS configuration
 # ----------------------------------------------------------------------------
@@ -48,14 +40,22 @@ OBJDIR  =
 EXEC    =
 EXEC_SUFFIX ?=
 
+# Resource (Windows only)
+RC      =
+RCFLAGS =
+RES     =
+
 # Per-OS configuration
 ifeq ($(TARGET_OS), win32)
     CC      = i686-w64-mingw32-gcc
+    RC      = windres
     CFLAGS  = $(CFLAGS_COMMON) -static
     LDFLAGS = -lws2_32
     BINDIR  = bin/win
     OBJDIR  = obj/win
     EXEC    = $(BINDIR)/pingdd.exe
+    RES     = $(OBJDIR)/version.res.o
+    RCFLAGS = -I.
 else ifeq ($(TARGET_OS), linux)
     CC      = gcc
     CFLAGS  = $(CFLAGS_COMMON) -D_POSIX_C_SOURCE=200112L -D_GNU_SOURCE
@@ -69,6 +69,12 @@ else
 endif
 
 OBJECTS = $(SOURCES:src/%.c=$(OBJDIR)/%.o)
+
+ifeq ($(TARGET_OS), win32)
+  ifneq ($(RES),)
+    OBJECTS += $(RES)
+  endif
+endif
 
 # ----------------------------------------------------------------------------
 # Portable commands (detect environment)
@@ -115,6 +121,12 @@ $(BINDIR) $(OBJDIR):
 # Link
 $(EXEC): $(BINDIR) $(OBJDIR) $(OBJECTS)
 	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
+
+# Windows resource compilation
+ifeq ($(TARGET_OS), win32)
+$(RES): version.rc | $(OBJDIR)
+	$(RC) $(RCFLAGS) -i $< -o $@
+endif
 
 # Compile
 $(OBJDIR)/%.o: src/%.c $(HEADERS)

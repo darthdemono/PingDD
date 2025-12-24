@@ -1,7 +1,7 @@
 /**
  * @file stats.h
  * @brief Statistics tracking interface
- * @author Jubair Hasan (Joy)
+ * @author DarthDemono
  */
 
 #ifndef STATS_H

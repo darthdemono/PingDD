@@ -1,7 +1,7 @@
 /**
  * @file i18n.c
  * @brief MISRA C compliant internationalization implementation
- * @author Jubair Hasan (Joy)
+ * @author DarthDemono
  */
 
 #include "i18n.h"

@@ -45,7 +45,7 @@
 
 /* Application constants */
 #define NAME "PingDD"
-#define AUTHOR "Jubair Hasan (Joy)"
+#define AUTHOR "DarthDemono"
 
 /* Host structure (shared across modules) */
 /**

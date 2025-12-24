@@ -1,7 +1,7 @@
 /**
  * @file stats.c
  * @brief MISRA C compliant statistics tracking for PingDD
- * @author Jubair Hasan (Joy)
+ * @author DarthDemono
  * @version 1.0.0
  * @date 2025-12-19
  */

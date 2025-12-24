@@ -1,7 +1,7 @@
 /**
  * @file i18n.h
  * @brief  internationalization interface for PingDD
- * @author Jubair Hasan (Joy)
+ * @author DarthDemono
  */
 
 #ifndef I18N_H

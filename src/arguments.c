@@ -1,7 +1,7 @@
 /**
  * @file arguments.c
  * @brief MISRA C compliant argument parsing implementation
- * @author Jubair Hasan (Joy)
+ * @author DarthDemono
  */
 
 #include "arguments.h"

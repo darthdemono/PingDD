@@ -1,7 +1,7 @@
 /**
  * @file gettimeofday.c
  * @brief Windows-compatible gettimeofday() implementation
- * @author Jubair Hasan (Joy)
+ * @author DarthDemono
  */
 
 #ifdef _WIN32

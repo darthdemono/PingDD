@@ -1,7 +1,7 @@
 /**
  * @file main.c
  * @brief Main file for PingDD application
- * @author Jubair Hasan (Joy)
+ * @author DarthDemono
  */
 #include "standard.h"
 #include "socket.h"
