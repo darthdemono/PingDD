@@ -1,5 +1,5 @@
 /**
- * @file standard.h - MISRA C compliant (no Windows conflicts)
+ * @file standard.h
  */
 #ifndef STANDARD_H
 #define STANDARD_H
