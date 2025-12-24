@@ -392,8 +392,9 @@ jobs:
 
             ### Changes
             ${{ steps.changelog.outputs.commits }}
-
-          artifacts: "release-assets/*"
+          artifacts: >
+            release-assets/pingdd.exe,
+            release-assets/*/pingdd
           artifactContentType: application/octet-stream
           token: ${{ secrets.GITHUB_TOKEN }}
           generateReleaseNotes: true
