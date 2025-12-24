@@ -33,9 +33,10 @@ void PrintUsage(void)
                    "  -p, --port N       set TCP port N (required)\n"
                    "  -t, --timeout N    timeout in milliseconds (default 1000)\n"
                    "  -c, --count N      set number of checks to N (default infinite)\n"
+                   "  -r, --rate N       set rate of pings to 1 ping per N ms (default 50ms)\n"
                    "  --no-color         disable color output\n"
-                   "  -?, --help         display this help\n"
-                   "  --csv              enable CSV output\n");
+                   "  --csv              enable CSV output\n"
+                   "  -?, --help         display this help\n");
     ResetColor();
 }
 
@@ -63,6 +64,7 @@ int32_t ProcessArguments(int32_t const argc,
     arguments->Destination = NULL;
     arguments->Type = IPPROTO_TCP;
     arguments->CSVOutput = false;
+    arguments->Rate = 0U;
     /* Parse arguments */
     for (i = 1; i < argc; i++)
     {
@@ -127,6 +129,15 @@ int32_t ProcessArguments(int32_t const argc,
         else if (strcmp(arg, "--csv") == 0)
         {
             arguments->CSVOutput = true;
+        }
+        else if ((strcmp(arg, "-r") == 0) || (strcmp(arg, "--rate") == 0))
+        {
+            if (i + 1 >= argc)
+            {
+                PrintError("Error: --rate requires value");
+                return PINGDD_INVALID_ARGS;
+            }
+            arguments->Rate = (uint32_t)atoi(argv[++i]);
         }
 
         /* Destination (last non-option argument) */

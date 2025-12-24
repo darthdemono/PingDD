@@ -21,6 +21,7 @@ typedef struct
     bool CSVOutput;
     pcc_t Destination;
     int32_t Type;
+    uint32_t Rate;
 } arguments_t;
 
 /* Function declarations */

@@ -223,9 +223,14 @@ int main(int argc, char *const *argv)
         stats.Attempts++;
         i++;
 
-        if (args.Count != -1)
+        /* Dynamic rate control */
+        if (args.Rate > 0U)
         {
-            delay_ms(50U);
+            delay_ms(args.Rate); /* User-specified rate */
+        }
+        else if (args.Count != -1)
+        {
+            delay_ms(50U); /* Default 50ms for finite count */
         }
     }
 

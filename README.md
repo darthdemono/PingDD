@@ -51,10 +51,11 @@ pingdd <hostname> -p <port> -c <time> -t [timeout]
 | <hostname>      | Target hostname or IP address    | Yes      | -              |
 | -p, --port N    | Set TCP port N                   | Yes      | -              |
 | -t, --timeout N | Timeout in milliseconds          | No       | 1000           |
-| -c, --count N   | Number of checks (infinite = -1) | No       | infinite       |
+| -c, --count N   | Number of checks                 | No       | infinite       |
+| -r, --rate N    | Rate of pings                    | No       | 50ms           |
 | --no-color      | Disable color output             | No       | Colors enabled |
-| -?, --help      | Display this help                | No       | -              |
 | --csv           | Enable CSV output                | No       | Disabled       |
+| -?, --help      | Display this help                | No       | -              |
 
 ### Example
 
