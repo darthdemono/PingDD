@@ -32,7 +32,6 @@ static volatile sig_atomic_t g_interrupted = 0;
 /* Global CSV file handle */
 static FILE *csv_file = NULL;
 
-/* Helper: Get timestamp string without printing (REUSES PrintTimestamp logic) */
 static inline void GetTimestampString(char *const buf, const size_t buf_size)
 {
     time_t now = time(NULL);
@@ -46,16 +45,23 @@ static inline void GetTimestampString(char *const buf, const size_t buf_size)
     /* Total bias in MINUTES west of UTC */
     LONG bias_minutes = (result == TIME_ZONE_ID_DAYLIGHT) ? tz_info.Bias + tz_info.DaylightBias : tz_info.Bias;
 
-    /* Convert to east offset: hours + minutes */
     int timezone_offset_minutes = -bias_minutes;
-    int timezone_hours = timezone_offset_minutes / 60;
-    int timezone_mins = (timezone_offset_minutes < 0) ? -(abs(timezone_offset_minutes) % 60) : (abs(timezone_offset_minutes) % 60);
 #else
-    /* POSIX: Full precision */
-    int timezone_offset_minutes = (int)(tm_local->tm_gmtoff / 60);
+    /* FIXED Linux: Use timezone global + dst */
+    extern long timezone; /* Seconds west of UTC */
+    extern int daylight;  /* DST active? */
+
+    long tz_seconds = timezone;
+    if (daylight != 0)
+    {
+        tz_seconds -= 3600; /* Subtract 1 hour for DST */
+    }
+
+    int timezone_offset_minutes = -(int)(tz_seconds / 60); /* East offset */
+#endif
+
     int timezone_hours = timezone_offset_minutes / 60;
     int timezone_mins = abs(timezone_offset_minutes % 60);
-#endif
 
     char sign = (timezone_offset_minutes >= 0) ? '+' : '-';
     int abs_hours = abs(timezone_hours);

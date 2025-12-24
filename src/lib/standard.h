@@ -47,6 +47,12 @@
 #define NAME "PingDD"
 #define AUTHOR "DarthDemono"
 
+/* Timezone globals for Linux compatibility */
+#ifndef _WIN32
+extern long timezone;
+extern int daylight;
+#endif
+
 /* Host structure (shared across modules) */
 /**
  * @brief Host structure

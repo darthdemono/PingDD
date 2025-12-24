@@ -58,7 +58,7 @@ ifeq ($(TARGET_OS), win32)
     RCFLAGS = -I.
 else ifeq ($(TARGET_OS), linux)
     CC      = gcc
-    CFLAGS  = $(CFLAGS_COMMON) -D_POSIX_C_SOURCE=200112L -D_GNU_SOURCE
+    CFLAGS  = $(CFLAGS_COMMON) -D_POSIX_C_SOURCE=200112L -D_GNU_SOURCE -static
     LDFLAGS =
     BINDIR  = bin/linux
     OBJDIR  = obj/linux
