@@ -26,7 +26,7 @@ void PrintBanner(void)
 void PrintUsage(void)
 {
     FormattedPrint(PRINT_YELLOW,
-                   "PingDD - A simple ping utility\n"
+                   "PingDD is a cross-platform ping tool for TCP port checking.\n"
                    "Syntax: pingdd [options] destination\n"
                    "\n"
                    "Options:\n"
@@ -34,7 +34,8 @@ void PrintUsage(void)
                    "  -t, --timeout N    timeout in milliseconds (default 1000)\n"
                    "  -c, --count N      set number of checks to N (default infinite)\n"
                    "  --no-color         disable color output\n"
-                   "  -?, --help         display this help\n");
+                   "  -?, --help         display this help\n"
+                   "  --csv              enable CSV output\n");
     ResetColor();
 }
 
@@ -61,7 +62,7 @@ int32_t ProcessArguments(int32_t const argc,
     arguments->UseColor = true;
     arguments->Destination = NULL;
     arguments->Type = IPPROTO_TCP;
-
+    arguments->CSVOutput = false;
     /* Parse arguments */
     for (i = 1; i < argc; i++)
     {
@@ -122,6 +123,12 @@ int32_t ProcessArguments(int32_t const argc,
         {
             arguments->UseColor = false;
         }
+
+        else if (strcmp(arg, "--csv") == 0)
+        {
+            arguments->CSVOutput = true;
+        }
+
         /* Destination (last non-option argument) */
         else
         {
