@@ -1,9 +1,7 @@
 /**
  * @file socket.h
- * @brief MISRA C compliant socket interface for PingDD
+ * @brief socket interface for PingDD
  * @author DarthDemono
- * @version 1.0.0
- * @date 2025-12-19
  */
 
 #ifndef SOCKET_H
