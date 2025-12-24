@@ -17,6 +17,7 @@
 #include <signal.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <time.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -34,6 +35,15 @@ static inline void delay_ms(uint32_t ms)
     sleep(ms);
 #endif
 }
+
+static inline void PrintTimestamp(void)
+{
+    time_t now = time(NULL);
+    char ts_buf[32U] = {0};
+    (void)snprintf(ts_buf, sizeof(ts_buf), "%lu ", (unsigned long)now);
+    FormattedPrint(PRINT_GREEN, ts_buf);
+}
+
 /* Static function prototypes */
 static void SignalHandler(int signal);
 
@@ -86,14 +96,12 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    /* Print header */
     (void)snprintf(header, sizeof(header),
                    "%s v%s - Copyright (c) %s\n",
                    NAME, PINGDD_VERSION_FULL, AUTHOR);
     FormattedPrint(PRINT_BLUE, header);
 
-    /* Print connecting info (segment colors like original C++) */
-    FormattedPrint(PRINT_YELLOW, "\nConnecting to ");
+    FormattedPrint(PRINT_YELLOW, "Connecting to ");
     FormattedPrint(PRINT_GREEN, args.Destination);
     FormattedPrint(PRINT_YELLOW, " on TCP ");
     {
@@ -102,6 +110,8 @@ int main(int argc, char *argv[])
                        (unsigned)args.Port);
         FormattedPrint(PRINT_GREEN, port_buf);
     }
+    FormattedPrint(PRINT_YELLOW, " on ");
+    PrintTimestamp();
     FormattedPrint(PRINT_YELLOW, ":\n");
     ResetColor();
 
@@ -114,7 +124,7 @@ int main(int argc, char *argv[])
 
         if (g_interrupted != 0)
         {
-            break; /* fall through to stats print and clean exit */
+            break;
         }
 
         if (connect_result == SUCCESS)
@@ -122,11 +132,10 @@ int main(int argc, char *argv[])
             char rtt_buf[64U] = {0};
             char port_buf[32U] = {0};
 
-            FormattedPrint(PRINT_WHITE, "Connected to ");
+            FormattedPrint(PRINT_WHITE, "Connected to  ");
             FormattedPrint(PRINT_GREEN, host.IPAddress);
             FormattedPrint(PRINT_WHITE, ": time=");
 
-            /* more accurate RTT: adjust precision here if needed */
             (void)snprintf(rtt_buf, sizeof(rtt_buf), "%.4fms ",
                            rtt * 1000.0);
             FormattedPrint(PRINT_GREEN, rtt_buf);
@@ -135,12 +144,12 @@ int main(int argc, char *argv[])
             FormattedPrint(PRINT_GREEN, "TCP ");
             FormattedPrint(PRINT_WHITE, "port=");
 
-            (void)snprintf(port_buf, sizeof(port_buf), "%u",
-                           (unsigned)host.Port);
+            (void)snprintf(port_buf, sizeof(port_buf), "%u", (unsigned)host.Port);
             FormattedPrint(PRINT_GREEN, port_buf);
+            FormattedPrint(PRINT_WHITE, " datetime=");
+            PrintTimestamp();
             (void)printf("\n");
-
-            Stats_UpdateMaxMin(&stats, rtt); /* also updates Total */
+            Stats_UpdateMaxMin(&stats, rtt);
             stats.Connects++;
         }
         else
@@ -156,11 +165,11 @@ int main(int argc, char *argv[])
 
         if (args.Count != -1)
         {
-            delay_ms(50U); /* 50 ms */
+            delay_ms(50U);
         }
     }
 
-    /* Print final statistics */
+    /* Print final statistics WITH GREEN TIMESTAMP */
     {
         char buf[64U] = {0};
         double fail_percent = 0.0;
