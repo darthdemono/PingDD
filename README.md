@@ -46,10 +46,15 @@ make
 pingdd <hostname> -p <port> -c <time> -t [timeout]
 ```
 
-- `hostname`: The address of the server you want to test.
-- `port`: The TCP port you want to check.
-- `time`: The amount of times port has to be pinged (Default infinite)
-- `timeout` (optional): Timeout for the connection attempt in milliseconds.
+| Option          | Description                      | Required | Default        |
+| --------------- | -------------------------------- | -------- | -------------- |
+| <hostname>      | Target hostname or IP address    | Yes      | -              |
+| -p, --port N    | Set TCP port N                   | Yes      | -              |
+| -t, --timeout N | Timeout in milliseconds          | No       | 1000           |
+| -c, --count N   | Number of checks (infinite = -1) | No       | infinite       |
+| --no-color      | Disable color output             | No       | Colors enabled |
+| -?, --help      | Display this help                | No       | -              |
+| --csv           | Enable CSV output                | No       | Disabled       |
 
 ### Example
 
