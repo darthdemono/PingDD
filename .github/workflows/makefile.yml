@@ -341,35 +341,33 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
-
-          # Windows: direct copy as pingdd.exe
-          cp artifacts/pingdd-win32-*/pingdd.exe release-assets/pingdd.exe
-          echo "✅ Copied pingdd.exe (Windows)"
-
-          # Linux: create distro directories with clean 'pingdd' name (no version in path)
           VERSION="${{ needs.build-windows.outputs.semver }}"
+
+          # Windows: rename to clean 'pingdd.exe'
+          cp artifacts/pingdd-win32-${VERSION}-signed/pingdd.exe release-assets/pingdd.exe
+          echo "✅ Created pingdd.exe"
+
+          # Linux: create individual ZIP files per distro
           for artifact_dir in artifacts/pingdd-*-${VERSION}/; do
             if [[ $artifact_dir == *"win32"* ]]; then
               continue
             fi
             
-            # Extract distro name from artifact directory
-            # Example: artifacts/pingdd-ubuntu-24.04-1.0.6/ → ubuntu-24.04
+            # Extract distro name
             artifact_basename=$(basename "$artifact_dir")
-            distro_name="${artifact_basename#pingdd-}"          # Remove 'pingdd-' prefix
-            distro_name="${distro_name%-${VERSION}}"             # Remove version suffix
+            distro_name="${artifact_basename#pingdd-}"
+            distro_name="${distro_name%-${VERSION}}"
             
-            # Create target directory WITHOUT version
-            target_dir="release-assets/${distro_name}"
-            mkdir -p "$target_dir"
+            # Create ZIP with clean name inside
+            cd "$artifact_dir"
+            zip "../release-assets/pingdd-${distro_name}.zip" pingdd-*
+            cd - > /dev/null
             
-            # Copy and rename binary to clean 'pingdd' name
-            cp "$artifact_dir"pingdd-* "$target_dir/pingdd"
-            echo "✅ Created $target_dir/pingdd"
+            echo "✅ Created pingdd-${distro_name}.zip"
           done
 
-          echo "=== Final release structure ==="
-          ls -lahR release-assets/
+          echo "=== Final release assets ==="
+          ls -lh release-assets/
 
       - name: Create GitHub Release
         id: release
@@ -383,21 +381,21 @@ jobs:
             ## Downloads
 
             ### Windows
-            - `pingdd.exe` - Windows 32-bit (signed)
+            - `pingdd.exe` - Windows 32-bit (self-signed)
 
             ### Linux Distributions
-            - Ubuntu 24.04, 22.04
-            - Debian Bookworm, Bullseye
-            - Fedora 40
-            - Alpine 3.19
-            - CentOS Stream 9
+            - `pingdd-ubuntu-24.04.zip` - Ubuntu 24.04
+            - `pingdd-ubuntu-22.04.zip` - Ubuntu 22.04
+            - `pingdd-debian-bookworm.zip` - Debian Bookworm
+            - `pingdd-debian-bullseye.zip` - Debian Bullseye
+            - `pingdd-fedora-40.zip` - Fedora 40
+            - `pingdd-alpine-3.19.zip` - Alpine 3.19
+            - `pingdd-centos-stream9.zip` - CentOS Stream 9
 
             ### Changes
             ${{ steps.changelog.outputs.commits }}
-          artifacts: >
-            release-assets/pingdd.exe,
-            release-assets/*/pingdd
-          artifactContentType: application/octet-stream
+          artifacts: "release-assets/*"
+          artifactContentType: application/zip
           token: ${{ secrets.GITHUB_TOKEN }}
           generateReleaseNotes: true
           allowUpdates: true
