@@ -1,5 +1,10 @@
-/* Keep the top-left project logo small and consistent */
 #projectlogo img {
+    /* Keep the top-left project logo small and consistent */
     height: 64px;
     width: auto;
+}
+
+html {
+    /* Make sidebar wide enough for search + title */
+    --side-nav-fixed-width: 340px;
 }
