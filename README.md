@@ -1,72 +1,159 @@
 <p align="center">
-  <img src="pic/icon/PingDD Icon Small.png" alt="PingDD Icon">
+  <img src="https://github.com/darthdemono/PingDD/blob/main/pic/icon/PingDD%20Icon%20Small.png" alt="PingDD Icon">
 </p>
 
 # PingDD
 
-**PingDD** is a cross-platform ping tool made in C for TCP port checking. This tool is designed to help network administrators and enthusiasts test the availability and responsiveness of specific TCP ports on remote servers.
+**PingDD** is a cross-platform TCP “ping” tool written in C.  
+Instead of ICMP, it checks a specific TCP port and tells you whether it’s reachable, how fast the connection handshake completes, and (optionally) logs every attempt to CSV for later analysis. 
+This tool is designed to help network administrators and enthusiasts test the availability and responsiveness on remote servers.
 
 <p align="center">
-  <img src="pic/github/Screenshot.png" alt="PingDD Screenshot">
+  <img src="https://github.com/darthdemono/PingDD/blob/main/pic/github/Screenshot.png" alt="PingDD Screenshot">
 </p>
+
+---
+
+## Why PingDD exists
+
+Classic `ping` answers one question: “Can I reach this host over *ICMP*?”  
+In real-world troubleshooting, the question is usually different:
+
+- Is the service port actually open (80/443/22/3389/etc..)?
+- Is the connection slow because of latency, filtering, or handshake delays?
+- Can the results be logged and compared later?
+
+PingDD is built to solve these issues: simple feedback with clean output, and an option to keep evidence (CSV + timestamps).
+
+---
+
+## Features
+
+- TCP port reachability check (connect-based).
+- Measures connect time (RTT) in milliseconds (microsecond level precision).
+- Cross-platform behavior (Windows + Linux).
+- Colored terminal output (can be disabled).
+- Timestamp printed in output (useful for diagnostics).
+- Optional CSV logging (best for long runs and later review).
+
+---
 
 ## Installation
 
-### Installation on Windows
+### Windows
 
 #### Winget
 
-This tool can be downloaded using [Winget](https://learn.microsoft.com/en-us/windows/package-manager/).
-
-[Winget](https://learn.microsoft.com/en-us/windows/package-manager/) will automatically install this tool and add it to [%PATH%](https://en.wikipedia.org/wiki/PATH_(variable)).
+Download using [Winget](https://learn.microsoft.com/en-us/windows/package-manager/).  
+Winget installs PingDD and adds it to your `PATH` automatically.
 
 ```bash
 winget install -e --id DarthDemono.PingDD
 ```
 
-### Installation on Linux
+### Linux
 
-#### Compilation from Source
+#### From Releases
 
-- This tool can be compiled from source if your Operating System is not available in the release. 
+Download the latest binary from the GitHub Releases page:
+
+https://github.com/darthdemono/PingDD/releases
+
+#### Compile from Source
+
+If your OS is not available in the release list, compile from source:
 
 ```bash
-git clone https://github.com/darthdemono/pingdd.git
-cd pingdd
+git clone https://github.com/darthdemono/PingDD.git
+cd PingDD
 make clean
 make
 ```
 
-- Then it can be added to [%PATH%](https://en.wikipedia.org/wiki/PATH_(variable)).
-  - [Follow this tutorial, if you don't know how to do it.](https://www.sysadmit.com/2016/06/linux-anadir-ruta-al-path.html)
+Then add the binary to your `PATH`:
 
-## Usage 
+- https://www.sysadmit.com/2016/06/linux-anadir-ruta-al-path.html
+
+---
+
+## Usage
 
 ```bash
-pingdd <hostname> -p <port> -c <time> -t [timeout]
+
+pingdd <destination> -p <port> [options]
+
 ```
 
-| Option          | Description                      | Required | Default        |
-| --------------- | -------------------------------- | -------- | -------------- |
-| <hostname>      | Target hostname or IP address    | Yes      | -              |
-| -p, --port N    | Set TCP port N                   | Yes      | -              |
-| -t, --timeout N | Timeout in milliseconds          | No       | 1000           |
-| -c, --count N   | Number of checks                 | No       | infinite       |
-| -r, --rate N    | Rate of pings                    | No       | 50ms           |
-| --no-color      | Disable color output             | No       | Colors enabled |
-| --csv           | Enable CSV output                | No       | Disabled       |
-| -?, --help      | Display this help                | No       | -              |
+| Option            | Description                                   | Required | Default        |
+| :---------------- | :-------------------------------------------- | :------- | :------------- |
+| `<destination>`   | Target hostname or IP address                 | Yes      | -              |
+| `-p, --port N`    | Set TCP port N                                | Yes      | -              |
+| `-t, --timeout N` | Timeout in milliseconds                       | No       | `1000`         |
+| `-c, --count N`   | Number of checks                              | No       | infinite       |
+| `-r, --rate N`    | Rate: 1 check per N ms (delay between checks) | No       | `50ms`         |
+| `--no-color`      | Disable color output                          | No       | Colors enabled |
+| `--csv`           | Enable CSV logging                            | No       | Disabled       |
+| `-?, --help`      | Display help                                  | No       | -              |
 
-### Example
+
+---
+
+## Examples
+
+Check port 80 a hundred times:
 
 ```bash
 pingdd example.com -p 80 -c 100
 ```
 
+Slow the rate to one check every 500ms:
+
+```bash
+pingdd example.com -p 443 -r 500
+```
+
+Enable CSV logging:
+
+```bash
+pingdd example.com -p 443 --csv
+```
+
+
+---
+
+## CSV output
+
+When CSV logging is enabled, PingDD generates a timestamped filename and writes:
+
+- DateTime
+- Host
+- IPAddress
+- Protocol
+- Port
+- Time_ms
+
+This makes it easy to graph results later, compare different networks, or keep records for debugging.
+
+---
+
+## Project notes
+
+PingDD aims to keep the codebase straightforward and readable.
+The project leans toward predictable behavior, clean output, and portability—so changes that improve reliability and cross-platform correctness are preferred over “clever” complexity.
+
+> "An idiot admires complexity, a genius admires simplicity" - [Terry A. Davis](https://en.wikipedia.org/wiki/Terry_A._Davis)
+
+---
+
 ## Contributing
 
-Contributions are welcome! Please open an issue or submit a pull request for any improvements or bug fixes.
+Contributions are welcome.
+
+- Open an issue for bugs, feature requests, or suggestions.
+- Submit a pull request if you want to improve code quality, portability, documentation, or CI packaging.
+
+---
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+MIT License. See [LICENSE](LICENSE).
