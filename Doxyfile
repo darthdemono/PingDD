@@ -1,7 +1,7 @@
 DOXYFILE_ENCODING      = UTF-8
 PROJECT_NAME           = "PingDD"
 PROJECT_NUMBER         = 1.1.0
-PROJECT_BRIEF          = "Cross-platform TCP/UDP ping utility with CSV logging and custom DNS"
+PROJECT_BRIEF          = "PingDD is a cross-platform TCP “ping” tool written in C."
 PROJECT_LOGO           = "pic/icon/PingDD Icon Small.png"
 PROJECT_ICON           = "pic/icon/PingDD Icon Small.png"
 IMAGE_PATH             = "pic/icon" "pic/github"

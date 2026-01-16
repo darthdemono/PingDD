@@ -1,5 +1,5 @@
 /* Keep the top-left project logo small and consistent */
 #projectlogo img {
-    height: 48px;
+    height: 64px;
     width: auto;
 }
