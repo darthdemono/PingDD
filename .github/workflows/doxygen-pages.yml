@@ -1,0 +1,97 @@
+name: Doxygen Docs (GitHub Pages)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Doxygen HTML
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Match your CI versioning style (GitVersion) so docs show the same version.
+      - name: Setup GitVersion
+        uses: gittools/actions/gitversion/setup@v4
+        with:
+          versionSpec: "6.5.1"
+
+      - name: Run GitVersion
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@v4
+        with:
+          configFilePath: GitVersion.yml
+
+      - name: Install Doxygen + Graphviz
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y doxygen graphviz
+
+      - name: Prepare Doxyfile for CI
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ steps.gitversion.outputs.SemVer }}"
+          echo "DOC VERSION: ${VERSION}"
+
+          cp Doxyfile Doxyfile.ci
+
+          # Fix repo-root paths for CI (your Doxyfile uses ../pic/...)
+          sed -i 's|^IMAGE_PATH *=.*|IMAGE_PATH = "pic/icon" "pic/github"|' Doxyfile.ci
+          sed -i 's|^PROJECT_LOGO *=.*|PROJECT_LOGO = "pic/icon/PingDD Icon Small.png"|' Doxyfile.ci
+          sed -i 's|^PROJECT_ICON *=.*|PROJECT_ICON = "pic/icon/PingDD Icon Small.png"|' Doxyfile.ci
+
+          # Make Doxygen show the same version as your releases/CI
+          sed -i "s|^PROJECT_NUMBER *=.*|PROJECT_NUMBER = ${VERSION}|" Doxyfile.ci
+
+          # Use Graphviz from PATH on Ubuntu runner
+          sed -i 's|^DOT_PATH *=.*|DOT_PATH = |' Doxyfile.ci
+
+      - name: Generate documentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          doxygen Doxyfile.ci
+
+          # Ensure Pages serves static HTML (no Jekyll processing)
+          touch html/.nojekyll
+
+          test -f html/index.html
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: html
+
+  deploy:
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+      contents: read
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
