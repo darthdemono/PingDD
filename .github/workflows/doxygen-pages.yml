@@ -40,6 +40,13 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y doxygen graphviz
 
+      - name: Fetch doxygen-awesome-css
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf doxygen-awesome-css
+          git clone --depth 1 https://github.com/jothepro/doxygen-awesome-css.git doxygen-awesome-css
+
       - name: Prepare Doxyfile for CI
         shell: bash
         run: |
@@ -50,16 +57,26 @@ jobs:
 
           cp Doxyfile Doxyfile.ci
 
-          # Fix repo-root paths for CI (your Doxyfile uses ../pic/...)
+          # Paths (repo-root)
           sed -i 's|^IMAGE_PATH *=.*|IMAGE_PATH = "pic/icon" "pic/github"|' Doxyfile.ci
           sed -i 's|^PROJECT_LOGO *=.*|PROJECT_LOGO = "pic/icon/PingDD Icon Small.png"|' Doxyfile.ci
           sed -i 's|^PROJECT_ICON *=.*|PROJECT_ICON = "pic/icon/PingDD Icon Small.png"|' Doxyfile.ci
-          sed -i 's|^HTML_EXTRA_STYLESHEET *=.*|HTML_EXTRA_STYLESHEET = "docs/doxygen-custom.css"|' Doxyfile.ci
-          # Make Doxygen show the same version as your releases/CI
+
+          # Version shown in docs
           sed -i "s|^PROJECT_NUMBER *=.*|PROJECT_NUMBER = ${VERSION}|" Doxyfile.ci
 
-          # Use Graphviz from PATH on Ubuntu runner
+          # Graphviz: use dot from PATH (runner has it because you install graphviz)
           sed -i 's|^DOT_PATH *=.*|DOT_PATH = |' Doxyfile.ci
+
+          # doxygen-awesome-css (sidebar-only theme)
+          sed -i 's|^FULL_SIDEBAR *=.*|FULL_SIDEBAR = NO|' Doxyfile.ci
+          sed -i 's|^DISABLE_INDEX *=.*|DISABLE_INDEX = NO|' Doxyfile.ci
+          sed -i 's|^GENERATE_TREEVIEW *=.*|GENERATE_TREEVIEW = YES|' Doxyfile.ci
+          sed -i 's|^HTML_COLORSTYLE *=.*|HTML_COLORSTYLE = LIGHT|' Doxyfile.ci
+
+          # Include theme CSS + your overrides (overrides must come last)
+          # Note: this REPLACES any existing HTML_EXTRA_STYLESHEET line.
+          sed -i 's|^HTML_EXTRA_STYLESHEET *=.*|HTML_EXTRA_STYLESHEET = doxygen-awesome-css/doxygen-awesome.css \\\n  doxygen-awesome-css/doxygen-awesome-sidebar-only.css \\\n  docs/doxygen-custom.css|' Doxyfile.ci
 
       - name: Generate documentation
         shell: bash
