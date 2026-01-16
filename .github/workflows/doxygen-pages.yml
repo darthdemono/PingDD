@@ -45,8 +45,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          VERSION="${{ steps.gitversion.outputs.SemVer }}"
-          echo "DOC VERSION: ${VERSION}"
+          VERSION="$(git describe --tags --abbrev=0 | sed 's/^v//')"
+          echo "DOC VERSION (latest tag): ${VERSION}"
 
           cp Doxyfile Doxyfile.ci
 
@@ -54,7 +54,7 @@ jobs:
           sed -i 's|^IMAGE_PATH *=.*|IMAGE_PATH = "pic/icon" "pic/github"|' Doxyfile.ci
           sed -i 's|^PROJECT_LOGO *=.*|PROJECT_LOGO = "pic/icon/PingDD Icon Small.png"|' Doxyfile.ci
           sed -i 's|^PROJECT_ICON *=.*|PROJECT_ICON = "pic/icon/PingDD Icon Small.png"|' Doxyfile.ci
-
+          sed -i 's|^HTML_EXTRA_STYLESHEET *=.*|HTML_EXTRA_STYLESHEET = "docs/doxygen-custom.css"|' Doxyfile.ci
           # Make Doxygen show the same version as your releases/CI
           sed -i "s|^PROJECT_NUMBER *=.*|PROJECT_NUMBER = ${VERSION}|" Doxyfile.ci
 
