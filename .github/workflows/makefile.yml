@@ -294,9 +294,9 @@ jobs:
           name: pingdd-${{ matrix.distro_name }}-${{ steps.gitversion.outputs.SemVer }}
           path: bin/linux/pingdd-${{ matrix.distro_name }}
 
-  # Job 3: Create Release + Publish to WinGet
+  # Job 3: Create Release
   release:
-    name: Publish Release & WinGet
+    name: Publish Releas
     needs: [check-src-changed, build-windows, build-linux]
     if: |
       (needs.check-src-changed.outputs.src_changed == 'true' && github.ref == 'refs/heads/main') ||
@@ -313,10 +313,12 @@ jobs:
 
       - name: Get commit history since last release
         id: changelog
+        shell: bash
         run: |
+          set -euo pipefail
           PREV_TAG=$(git describe --tags --abbrev=0 $(git rev-list --tags --max-count=1) 2>/dev/null || echo "")
           if [ -n "$PREV_TAG" ]; then
-            git log --pretty=format:"- %s (%an)" $PREV_TAG..HEAD > commits.txt
+            git log --pretty=format:"- %s (%an)" "$PREV_TAG"..HEAD > commits.txt
           else
             git log --pretty=format:"- %s (%an)" HEAD~10..HEAD > commits.txt
           fi
@@ -332,38 +334,45 @@ jobs:
         with:
           path: artifacts/
           pattern: pingdd-*
+          merge-multiple: false
 
       - name: List artifacts
+        shell: bash
         run: |
+          set -euo pipefail
           echo "=== Artifacts structure ==="
           ls -laR artifacts/
 
-      - name: Prepare release assets
+      - name: Prepare release assets (FIXED)
+        shell: bash
         run: |
+          set -euo pipefail
+
+          # Ensure zip exists
+          sudo apt-get update -qq
+          sudo apt-get install -y zip
+
           mkdir -p release-assets
           VERSION="${{ needs.build-windows.outputs.semver }}"
 
-          # Windows: rename to clean 'pingdd.exe'
-          cp artifacts/pingdd-win32-${VERSION}-signed/pingdd.exe release-assets/pingdd.exe
-          echo "✅ Created pingdd.exe"
+          # Windows: copy as clean 'pingdd.exe'
+          cp "artifacts/pingdd-win32-${VERSION}-signed/pingdd.exe" "release-assets/pingdd.exe"
+          echo "✅ Created release-assets/pingdd.exe"
 
           # Linux: create individual ZIP files per distro
-          for artifact_dir in artifacts/pingdd-*-${VERSION}/; do
-            if [[ $artifact_dir == *"win32"* ]]; then
+          shopt -s nullglob
+          for artifact_dir in artifacts/pingdd-*-${VERSION}; do
+            if [[ "${artifact_dir}" == *"win32"* ]]; then
               continue
             fi
-            
-            # Extract distro name
-            artifact_basename=$(basename "$artifact_dir")
+
+            artifact_basename="$(basename "${artifact_dir}")"
             distro_name="${artifact_basename#pingdd-}"
             distro_name="${distro_name%-${VERSION}}"
-            
-            # Create ZIP with clean name inside
-            cd "$artifact_dir"
-            zip "../release-assets/pingdd-${distro_name}.zip" pingdd-*
-            cd - > /dev/null
-            
-            echo "✅ Created pingdd-${distro_name}.zip"
+
+            # -j = junk paths (zip contains only the binary, no folder nesting)
+            zip -j "release-assets/pingdd-${distro_name}.zip" "${artifact_dir}"/pingdd-*
+            echo "✅ Created release-assets/pingdd-${distro_name}.zip"
           done
 
           echo "=== Final release assets ==="
@@ -395,7 +404,6 @@ jobs:
             ### Changes
             ${{ steps.changelog.outputs.commits }}
           artifacts: "release-assets/*"
-          artifactContentType: application/zip
           token: ${{ secrets.GITHUB_TOKEN }}
           generateReleaseNotes: true
           allowUpdates: true
