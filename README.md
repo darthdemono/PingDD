@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://github.com/darthdemono/PingDD/blob/main/pic/icon/PingDD%20Icon%20Small.png" alt="PingDD Icon">
+  <img src="https://raw.githubusercontent.com/darthdemono/PingDD/refs/heads/main/pic/icon/PingDD%20Icon%20Small.png" alt="PingDD Icon">
 </p>
 
 # PingDD
@@ -9,7 +9,7 @@ Instead of ICMP, it checks a specific TCP port and tells you whether it’s reac
 This tool is designed to help network administrators and enthusiasts test the availability and responsiveness on remote servers.
 
 <p align="center">
-  <img src="https://github.com/darthdemono/PingDD/blob/main/pic/github/Screenshot.png" alt="PingDD Screenshot">
+  <img src="https://raw.githubusercontent.com/darthdemono/PingDD/refs/heads/main/pic/github/Screenshot.png" alt="PingDD Screenshot">
 </p>
 
 ---
