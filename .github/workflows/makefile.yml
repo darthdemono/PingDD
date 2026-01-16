@@ -200,10 +200,166 @@ jobs:
         with:
           name: pingdd-win32-${{ steps.gitversion.outputs.SemVer }}-signed
           path: bin/win/pingdd.exe
+  # Job 1b: Windows ARM64
+  build-windows-arm64:
+    name: Build Windows ARM64
+    runs-on: windows-latest
+    needs: check-src-changed
+    if: needs.check-src-changed.outputs.src_changed == 'true' || startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      semver: ${{ steps.gitversion.outputs.SemVer }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-  # Job 2: Multi-Distro Linux (FIXED)
+      - name: Setup GitVersion
+        uses: gittools/actions/gitversion/setup@v4
+        with:
+          versionSpec: "6.5.1"
+
+      - name: Run GitVersion
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@v4
+        with:
+          configFilePath: GitVersion.yml
+
+      # Install LLVM-MinGW (recommended for Windows ARM64 cross builds) [web:376]
+      - name: Install LLVM-MinGW (ARM64 target)
+        shell: pwsh
+        run: |
+          $repo = "mstorsjo/llvm-mingw"
+          $api  = "https://api.github.com/repos/$repo/releases/latest"
+          $rel  = Invoke-RestMethod $api
+
+          # Pick a Windows-hosted toolchain zip (x86_64 host). Asset names change over time; this is the usual pattern.
+          $asset = $rel.assets | Where-Object { $_.name -match "ucrt-x86_64.*\.zip$" } | Select-Object -First 1
+          if (-not $asset) { throw "Could not find llvm-mingw *ucrt-x86_64*.zip asset in latest release." }
+
+          $zip = "$env:RUNNER_TEMP\llvm-mingw.zip"
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zip
+
+          $dest = "$env:RUNNER_TEMP\llvm-mingw"
+          Expand-Archive -Path $zip -DestinationPath $dest -Force
+
+          $bin = (Get-ChildItem $dest -Directory | Select-Object -First 1).FullName + "\bin"
+          echo $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Write-Output "✅ LLVM-MinGW bin: $bin"
+
+      - name: Generate version header
+        shell: bash
+        run: |
+          VERSION_FULL="${{ steps.gitversion.outputs.SemVer }}"
+          mkdir -p src/lib
+          cat > src/lib/version.h <<EOF
+          #ifndef PINGDD_VERSION_H
+          #define PINGDD_VERSION_H
+          #define PINGDD_VERSION       "${VERSION_FULL}"
+          #define PINGDD_VERSION_FULL  "${VERSION_FULL}"
+          #endif /* PINGDD_VERSION_H */
+          EOF
+
+      - name: Generate Windows version.rc
+        shell: bash
+        run: |
+          VERSION_FULL="${{ steps.gitversion.outputs.SemVer }}"
+
+          MAJOR="${VERSION_FULL%%.*}"
+          REST="${VERSION_FULL#*.}"
+          MINOR="${REST%%.*}"
+          REST="${REST#*.}"
+          PATCH="${REST%%.*}"
+          BUILD=0
+
+          cat > version.rc <<EOF
+          #include <windows.h>
+          IDI_MAIN_ICON ICON "pic/icon/PingDD Icon Small.ico"
+          #define VER_FILEVERSION             ${MAJOR},${MINOR},${PATCH},${BUILD}
+          #define VER_FILEVERSION_STR         "${VERSION_FULL}\0"
+          #define VER_PRODUCTVERSION          ${MAJOR},${MINOR},${PATCH},${BUILD}
+          #define VER_PRODUCTVERSION_STR      "${VERSION_FULL}\0"
+          #define VER_COMPANYNAME_STR         "DarthDemono\0"
+          #define VER_FILEDESCRIPTION_STR     "PingDD is a cross-platform ping tool for TCP port checking.\0"
+          #define VER_INTERNALNAME_STR        "PingDD\0"
+          #define VER_LEGALCOPYRIGHT_STR      "Copyright (c) 2025 DarthDemono\0"
+          #define VER_ORIGINALFILENAME_STR    "pingdd.exe\0"
+          #define VER_PRODUCTNAME_STR         "PingDD\0"
+          VS_VERSION_INFO VERSIONINFO
+          FILEVERSION     VER_FILEVERSION
+          PRODUCTVERSION  VER_PRODUCTVERSION
+          FILEFLAGSMASK   0x3fL
+          FILEFLAGS       0x0L
+          FILEOS          VOS__WINDOWS32
+          FILETYPE        VFT_APP
+          FILESUBTYPE     VFT2_UNKNOWN
+          BEGIN
+              BLOCK "StringFileInfo"
+              BEGIN
+                  BLOCK "040904E4"
+                  BEGIN
+                      VALUE "CompanyName",       VER_COMPANYNAME_STR
+                      VALUE "FileDescription",   VER_FILEDESCRIPTION_STR
+                      VALUE "FileVersion",       VER_FILEVERSION_STR
+                      VALUE "InternalName",      VER_INTERNALNAME_STR
+                      VALUE "LegalCopyright",    VER_LEGALCOPYRIGHT_STR
+                      VALUE "OriginalFilename",  VER_ORIGINALFILENAME_STR
+                      VALUE "ProductName",       VER_PRODUCTNAME_STR
+                      VALUE "ProductVersion",    VER_PRODUCTVERSION_STR
+                  END
+              END
+              BLOCK "VarFileInfo"
+              BEGIN
+                  VALUE "Translation", 0x0409, 1200
+              END
+          END
+          EOF
+
+      - name: Build PingDD (ARM64)
+        shell: bash
+        run: |
+          make clean
+          # Override RC to llvm-windres for LLVM-MinGW toolchain
+          make TARGET_OS=winarm64 RC=llvm-windres
+
+      - name: Self-sign executable (Windows SDK)
+        if: success() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install windows-sdk-10.0 -y --force
+          refreshenv
+
+          $signToolPaths = @(
+            "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.0.26621.0\x64\signtool.exe",
+            "${env:ProgramFiles(x86)}\Windows Kits\10\bin\x64\signtool.exe"
+          )
+          $signtool = $null
+          foreach ($path in $signToolPaths) {
+            if (Test-Path $path) { $signtool = $path; break }
+          }
+          if (-not $signtool) { throw "signtool.exe not found" }
+
+          $cert = New-SelfSignedCertificate -Subject "CN=DarthDemono" `
+                                           -Type CodeSigningCert `
+                                           -CertStoreLocation Cert:\CurrentUser\My `
+                                           -KeyLength 2048 `
+                                           -HashAlgorithm SHA256
+
+          & $signtool sign /n "DarthDemono" /tr http://timestamp.digicert.com /td sha256 bin/win-arm64/pingdd.exe
+          echo "✅ Self-signed: bin/win-arm64/pingdd.exe"
+
+      - name: Upload Windows ARM64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pingdd-winarm64-${{ steps.gitversion.outputs.SemVer }}-signed
+          path: bin/win-arm64/pingdd.exe
+
+  # Job 3: Multi-Distro Linux x86
   build-linux:
-    name: Build Linux (${{ matrix.distro_name }})
+    name: Build Linux x86 (${{ matrix.distro_name }})
     runs-on: ubuntu-latest
     needs: check-src-changed
     if: needs.check-src-changed.outputs.src_changed == 'true' || startsWith(github.ref, 'refs/tags/v')
@@ -250,7 +406,6 @@ jobs:
       - name: Generate version header
         run: |
           VERSION_FULL="${{ steps.gitversion.outputs.SemVer }}"
-          echo "VERSION_FULL=${VERSION_FULL}"
           mkdir -p src/lib
           cat > src/lib/version.h <<EOF
           #ifndef PINGDD_VERSION_H
@@ -266,10 +421,9 @@ jobs:
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace \
             --network=host \
-            -e EXEC_SUFFIX="-${{ matrix.distro_name }}" \
+            -e EXEC_SUFFIX="-${{ matrix.distro_name }}-x86" \
             ${{ matrix.distro }} \
             /bin/sh -c '
-              # Update package lists first
               if command -v apt-get >/dev/null 2>&1; then
                 apt-get update -qq || apt-get update -qq --fix-missing || true
                 apt-get install -y --no-install-recommends gcc make libc6-dev
@@ -281,23 +435,134 @@ jobs:
                 yum install -y gcc make glibc-devel
               fi
 
-              echo "GCC version:"
-              gcc --version || echo "GCC not found, retrying install..."
-
               make clean
               make linux
             '
 
-      - name: Upload ${{ matrix.distro_name }} artifact
+      - name: Upload ${{ matrix.distro_name }} x86 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pingdd-${{ matrix.distro_name }}-${{ steps.gitversion.outputs.SemVer }}
-          path: bin/linux/pingdd-${{ matrix.distro_name }}
+          name: pingdd-${{ matrix.distro_name }}-x86-${{ steps.gitversion.outputs.SemVer }}
+          path: bin/linux/pingdd-${{ matrix.distro_name }}-x86
+
+  build-linux-arm64:
+    name: Build Linux arm64 (cross)
+    runs-on: ubuntu-latest
+    needs: check-src-changed
+    if: needs.check-src-changed.outputs.src_changed == 'true' || startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup GitVersion
+        uses: gittools/actions/gitversion/setup@v4
+        with:
+          versionSpec: "6.5.1"
+
+      - name: Run GitVersion
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@v4
+        with:
+          configFilePath: GitVersion.yml
+
+      - name: Generate version header
+        run: |
+          VERSION_FULL="${{ steps.gitversion.outputs.SemVer }}"
+          mkdir -p src/lib
+          cat > src/lib/version.h <<EOF
+          #ifndef PINGDD_VERSION_H
+          #define PINGDD_VERSION_H
+          #define PINGDD_VERSION       "${VERSION_FULL}"
+          #define PINGDD_VERSION_FULL  "${VERSION_FULL}"
+          #endif /* PINGDD_VERSION_H */
+          EOF
+
+      - name: Install arm64 toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y make gcc-aarch64-linux-gnu
+
+      - name: Build (arm64)
+        run: |
+          make clean
+          make TARGET_OS=linuxarm64 EXEC_SUFFIX="-arm64"
+
+      - name: Upload Linux arm64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pingdd-linux-arm64-${{ steps.gitversion.outputs.SemVer }}
+          path: bin/linux-arm64/pingdd-arm64
+
+  build-linux-arm:
+    name: Build Linux arm (32-bit) (cross)
+    runs-on: ubuntu-latest
+    needs: check-src-changed
+    if: needs.check-src-changed.outputs.src_changed == 'true' || startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup GitVersion
+        uses: gittools/actions/gitversion/setup@v4
+        with:
+          versionSpec: "6.5.1"
+
+      - name: Run GitVersion
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@v4
+        with:
+          configFilePath: GitVersion.yml
+
+      - name: Generate version header
+        run: |
+          VERSION_FULL="${{ steps.gitversion.outputs.SemVer }}"
+          mkdir -p src/lib
+          cat > src/lib/version.h <<EOF
+          #ifndef PINGDD_VERSION_H
+          #define PINGDD_VERSION_H
+          #define PINGDD_VERSION       "${VERSION_FULL}"
+          #define PINGDD_VERSION_FULL  "${VERSION_FULL}"
+          #endif /* PINGDD_VERSION_H */
+          EOF
+
+      - name: Install arm toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y make gcc-arm-linux-gnueabihf
+
+      - name: Build (arm)
+        run: |
+          make clean
+          make TARGET_OS=linuxarm EXEC_SUFFIX="-arm"
+
+      - name: Upload Linux arm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pingdd-linux-arm-${{ steps.gitversion.outputs.SemVer }}
+          path: bin/linux-arm/pingdd-arm
 
   # Job 3: Create Release
   release:
-    name: Publish Releas
-    needs: [check-src-changed, build-windows, build-linux]
+    name: Publish Release
+    needs:
+      [
+        check-src-changed,
+        build-windows,
+        build-windows-arm64,
+        build-linux,
+        build-linux-arm64,
+        build-linux-arm,
+      ]
     if: |
       (needs.check-src-changed.outputs.src_changed == 'true' && github.ref == 'refs/heads/main') ||
       startsWith(github.ref, 'refs/tags/v')
@@ -327,7 +592,6 @@ jobs:
           echo "commits<<EOF" >> $GITHUB_OUTPUT
           echo "$COMMITS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-          echo "Previous tag: $PREV_TAG"
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -336,50 +600,69 @@ jobs:
           pattern: pingdd-*
           merge-multiple: false
 
-      - name: List artifacts
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "=== Artifacts structure ==="
-          ls -laR artifacts/
-
-      - name: Prepare release assets (FIXED)
+      - name: Prepare release assets (arch-aware)
         shell: bash
         run: |
           set -euo pipefail
 
-          # Ensure zip exists
           sudo apt-get update -qq
           sudo apt-get install -y zip
 
           mkdir -p release-assets
           VERSION="${{ needs.build-windows.outputs.semver }}"
 
-          # Windows: copy as clean 'pingdd.exe'
-          cp "artifacts/pingdd-win32-${VERSION}-signed/pingdd.exe" "release-assets/pingdd.exe"
-          echo "✅ Created release-assets/pingdd.exe"
+          distros=(
+            "ubuntu-24.04"
+            "ubuntu-22.04"
+            "debian-bookworm"
+            "debian-bullseye"
+            "fedora-40"
+            "alpine-3.19"
+            "centos-stream9"
+          )
 
-          # Linux: create individual ZIP files per distro
-          shopt -s nullglob
-          for artifact_dir in artifacts/pingdd-*-${VERSION}; do
-            if [[ "${artifact_dir}" == *"win32"* ]]; then
-              continue
-            fi
+          # -----------------------------
+          # Windows zips
+          # -----------------------------
+          zip -j "release-assets/pingdd-windows-x86.zip" \
+            "artifacts/pingdd-win32-${VERSION}-signed/pingdd.exe"
 
-            artifact_basename="$(basename "${artifact_dir}")"
-            distro_name="${artifact_basename#pingdd-}"
-            distro_name="${distro_name%-${VERSION}}"
+          zip -j "release-assets/pingdd-windows-arm64.zip" \
+            "artifacts/pingdd-winarm64-${VERSION}-signed/pingdd.exe"
 
-            # -j = junk paths (zip contains only the binary, no folder nesting)
-            zip -j "release-assets/pingdd-${distro_name}.zip" "${artifact_dir}"/pingdd-*
-            echo "✅ Created release-assets/pingdd-${distro_name}.zip"
+          # -----------------------------
+          # Linux x86 zips (already per-distro)
+          # -----------------------------
+          for d in "${distros[@]}"; do
+            zip -j "release-assets/pingdd-${d}-x86.zip" \
+              "artifacts/pingdd-${d}-x86-${VERSION}/pingdd-"*
+          done
+
+          # -----------------------------
+          # Linux arm64 + arm zips (single build duplicated per distro)
+          # -----------------------------
+          ARM64_BIN="artifacts/pingdd-linux-arm64-${VERSION}/pingdd-arm64"
+          ARM_BIN="artifacts/pingdd-linux-arm-${VERSION}/pingdd-arm"
+
+          chmod +x "$ARM64_BIN" "$ARM_BIN" || true
+
+          for d in "${distros[@]}"; do
+            tmp64="release-assets/pingdd-${d}-arm64"
+            tmp32="release-assets/pingdd-${d}-arm"
+
+            cp "$ARM64_BIN" "$tmp64"
+            cp "$ARM_BIN"  "$tmp32"
+
+            zip -j "release-assets/pingdd-${d}-arm64.zip" "$tmp64"
+            zip -j "release-assets/pingdd-${d}-arm.zip"   "$tmp32"
+
+            rm -f "$tmp64" "$tmp32"
           done
 
           echo "=== Final release assets ==="
           ls -lh release-assets/
 
       - name: Create GitHub Release
-        id: release
         uses: ncipollo/release-action@v1
         with:
           tag: v${{ needs.build-windows.outputs.semver }}
@@ -390,16 +673,35 @@ jobs:
             ## Downloads
 
             ### Windows
-            - `pingdd.exe` - Windows 32-bit (self-signed)
+            - `pingdd-windows-x86.zip` - Windows 32-bit (self-signed)
+            - `pingdd-windows-arm64.zip` - Windows ARM64 (self-signed)
 
-            ### Linux Distributions
-            - `pingdd-ubuntu-24.04.zip` - Ubuntu 24.04
-            - `pingdd-ubuntu-22.04.zip` - Ubuntu 22.04
-            - `pingdd-debian-bookworm.zip` - Debian Bookworm
-            - `pingdd-debian-bullseye.zip` - Debian Bullseye
-            - `pingdd-fedora-40.zip` - Fedora 40
-            - `pingdd-alpine-3.19.zip` - Alpine 3.19
-            - `pingdd-centos-stream9.zip` - CentOS Stream 9
+            ### Linux (x86)
+            - `pingdd-ubuntu-24.04-x86.zip` - Ubuntu 24.04 x86
+            - `pingdd-ubuntu-22.04-x86.zip` - Ubuntu 22.04 x86
+            - `pingdd-debian-bookworm-x86.zip` - Debian Bookworm x86
+            - `pingdd-debian-bullseye-x86.zip` - Debian Bullseye x86
+            - `pingdd-fedora-40-x86.zip` - Fedora 40 x86
+            - `pingdd-alpine-3.19-x86.zip` - Alpine 3.19
+            - `pingdd-centos-stream9-x86.zip` - CentOS Stream 9 x86
+
+            ### Linux (arm64)
+            - `pingdd-ubuntu-24.04-arm64.zip` - Ubuntu 24.04 arm64
+            - `pingdd-ubuntu-22.04-arm64.zip` - Ubuntu 22.04 arm64
+            - `pingdd-debian-bookworm-arm64.zip` - Debian Bookworm arm64
+            - `pingdd-debian-bullseye-arm64.zip` - Debian Bullseye arm64
+            - `pingdd-fedora-40-arm64.zip` - Fedora 40 arm64
+            - `pingdd-alpine-3.19-arm64.zip` - Alpine 3.19 arm64
+            - `pingdd-centos-stream9-arm64.zip` - CentOS Stream 9 arm64
+
+            ### Linux (arm)
+            - `pingdd-ubuntu-24.04-arm.zip` - Ubuntu 24.04 arm
+            - `pingdd-ubuntu-22.04-arm.zip` - Ubuntu 22.04 arm
+            - `pingdd-debian-bookworm-arm.zip` - Debian Bookworm arm
+            - `pingdd-debian-bullseye-arm.zip` - Debian Bullseye arm
+            - `pingdd-fedora-40-arm.zip` - Fedora 40 arm
+            - `pingdd-alpine-3.19-arm.zip` - Alpine 3.19 arm
+            - `pingdd-centos-stream9-arm.zip` - CentOS Stream 9 arm
 
             ### Changes
             ${{ steps.changelog.outputs.commits }}

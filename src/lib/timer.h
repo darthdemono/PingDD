@@ -12,7 +12,7 @@
 
 /**
  * @struct pingdd_timer_t
- * @brief Timer state used by @ref Timer_Start and @ref Timer_Stop.
+ * @brief Timer state struct used by @ref Timer_Start and @ref Timer_Stop.
  */
 typedef struct {
   /** @brief True when the timer has been started and can be stopped. */

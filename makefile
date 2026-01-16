@@ -1,5 +1,5 @@
 # ============================================================================
-# Universal Makefile for PingDD (Windows 32-bit, Linux)
+# Universal Makefile for PingDD (Windows x86, Windows ARM64, Linux x86_64, Linux ARM/ARM64)
 # ============================================================================
 
 # ----------------------------------------------------------------------------
@@ -10,13 +10,28 @@ TARGET_OS := $(strip $(TARGET_OS))
 
 ifeq ($(TARGET_OS), auto)
   ifeq ($(OS),Windows_NT)
-    TARGET_OS := win32
+    # If building natively on Windows-on-ARM, PROCESSOR_ARCHITECTURE is often ARM64.
+    # For cross builds from x86 Windows, explicitly set TARGET_OS=winarm64.
+    ifeq ($(PROCESSOR_ARCHITECTURE),ARM64)
+      TARGET_OS := winarm64
+    else
+      TARGET_OS := win32
+    endif
   else
     UNAME_S := $(shell uname -s)
+    UNAME_M := $(shell uname -m)
+
     ifeq ($(UNAME_S),Linux)
-      TARGET_OS := linux
+      # Auto-detect common Linux ARM machine types
+      ifeq ($(UNAME_M),aarch64)
+        TARGET_OS := linuxarm64
+      else ifneq (,$(filter armv7l armv6l armhf,$(UNAME_M)))
+        TARGET_OS := linuxarm
+      else
+        TARGET_OS := linux
+      endif
     else
-      $(error Unknown host OS; set TARGET_OS=win32/linux)
+      $(error Unknown host OS; set TARGET_OS=win32/winarm64/linux/linuxarm/linuxarm64)
     endif
   endif
 endif
@@ -28,10 +43,17 @@ CFLAGS_COMMON = -W -Wall -Wextra -Werror -std=c99 -Isrc/lib -fno-omit-frame-poin
 SOURCES       = $(wildcard src/*.c)
 HEADERS       = $(wildcard src/lib/*.h)
 
+# Optional: allow disabling static builds if toolchain lacks static libs
+STATIC ?= 1
+ifeq ($(STATIC),1)
+  CFLAGS_STATIC = -static
+else
+  CFLAGS_STATIC =
+endif
+
 # ----------------------------------------------------------------------------
 # Per-OS configuration
 # ----------------------------------------------------------------------------
-# Defaults (overridden per OS)
 CC      =
 CFLAGS  =
 LDFLAGS =
@@ -40,57 +62,84 @@ OBJDIR  =
 EXEC    =
 EXEC_SUFFIX ?=
 
-# Resource (Windows only)
 RC      =
 RCFLAGS =
 RES     =
 
-# Per-OS configuration
 ifeq ($(TARGET_OS), win32)
     CC      = i686-w64-mingw32-gcc
     RC      = windres
-    CFLAGS  = $(CFLAGS_COMMON) -static
+    CFLAGS  = $(CFLAGS_COMMON) $(CFLAGS_STATIC)
     LDFLAGS = -lws2_32
-    BINDIR  = bin/win
-    OBJDIR  = obj/win
+    BINDIR  = bin/win-x86
+    OBJDIR  = obj/win-x86
     EXEC    = $(BINDIR)/pingdd.exe
     RES     = $(OBJDIR)/version.res.o
     RCFLAGS = -I.
+
+else ifeq ($(TARGET_OS), winarm64)
+    # Windows ARM64 note: LLVM-MinGW supports targeting ARM/ARM64 Windows well. [web:376][web:374]
+    # If you don't have aarch64-w64-mingw32-gcc, you can also use clang --target=aarch64-w64-mingw32. [web:376]
+    CC      = aarch64-w64-mingw32-gcc
+    RC      = windres
+    CFLAGS  = $(CFLAGS_COMMON) $(CFLAGS_STATIC)
+    LDFLAGS = -lws2_32
+    BINDIR  = bin/win-arm64
+    OBJDIR  = obj/win-arm64
+    EXEC    = $(BINDIR)/pingdd.exe
+    RES     = $(OBJDIR)/version.res.o
+    RCFLAGS = -I.
+
 else ifeq ($(TARGET_OS), linux)
     CC      = gcc
-    CFLAGS  = $(CFLAGS_COMMON) -D_POSIX_C_SOURCE=200112L -D_GNU_SOURCE -static
+    CFLAGS  = $(CFLAGS_COMMON) -D_POSIX_C_SOURCE=200112L -D_GNU_SOURCE $(CFLAGS_STATIC)
     LDFLAGS =
     BINDIR  = bin/linux
     OBJDIR  = obj/linux
-    # NOTE: add suffix into filename
     EXEC    = $(BINDIR)/pingdd$(EXEC_SUFFIX)
+
+else ifeq ($(TARGET_OS), linuxarm)
+    # Common cross compiler name for ARM 32-bit hard-float: arm-linux-gnueabihf-gcc. [web:384]
+    CC      = arm-linux-gnueabihf-gcc
+    CFLAGS  = $(CFLAGS_COMMON) -D_POSIX_C_SOURCE=200112L -D_GNU_SOURCE $(CFLAGS_STATIC)
+    LDFLAGS =
+    BINDIR  = bin/linux-arm
+    OBJDIR  = obj/linux-arm
+    EXEC    = $(BINDIR)/pingdd$(EXEC_SUFFIX)
+
+else ifeq ($(TARGET_OS), linuxarm64)
+    # Common cross compiler name for ARM64: aarch64-linux-gnu-gcc. [web:384]
+    CC      = aarch64-linux-gnu-gcc
+    CFLAGS  = $(CFLAGS_COMMON) -D_POSIX_C_SOURCE=200112L -D_GNU_SOURCE $(CFLAGS_STATIC)
+    LDFLAGS =
+    BINDIR  = bin/linux-arm64
+    OBJDIR  = obj/linux-arm64
+    EXEC    = $(BINDIR)/pingdd$(EXEC_SUFFIX)
+
 else
-    $(error Unknown TARGET_OS '$(TARGET_OS)' (use win32, linux))
+    $(error Unknown TARGET_OS '$(TARGET_OS)' (use win32, winarm64, linux, linuxarm, linuxarm64))
 endif
 
 OBJECTS = $(SOURCES:src/%.c=$(OBJDIR)/%.o)
 
-ifeq ($(TARGET_OS), win32)
+ifneq (,$(filter win32 winarm64,$(TARGET_OS)))
   ifneq ($(RES),)
     OBJECTS += $(RES)
   endif
 endif
 
 # ----------------------------------------------------------------------------
-# Portable commands (detect environment)
+# Portable commands (detect environment) - unchanged
 # ----------------------------------------------------------------------------
 ifeq ($(OS),Windows_NT)
   ifneq ($(findstring /,$(SHELL)),)
-    # MSYS2/Git Bash (has Unix tools)
     RM      = rm -rf
     MKDIR_P = mkdir -p
   else
-    # Pure Windows CMD
     RM      = rmdir /s /q 2>nul || del /s /q 2>nul
     MKDIR_P = if not exist "$(subst /,\,$(@))" mkdir "$(subst /,\,$(@))"
   endif
 else
-  # Linux/Unix
   RM      = rm -rf
   MKDIR_P = mkdir -p
 endif
@@ -98,43 +147,42 @@ endif
 # ----------------------------------------------------------------------------
 # Phony targets
 # ----------------------------------------------------------------------------
-.PHONY: all clean win32 linux debug info help
+.PHONY: all clean win32 winarm64 linux linuxarm linuxarm64 debug info help
 
-# Default build
 all: $(EXEC)
 
-# OS shortcuts
 win32:
 	$(MAKE) TARGET_OS=win32
+
+winarm64:
+	$(MAKE) TARGET_OS=winarm64
 
 linux:
 	$(MAKE) TARGET_OS=linux
 
-# ----------------------------------------------------------------------------
-# Build rules (SIMPLIFIED - no complex conditionals in rules)
-# ----------------------------------------------------------------------------
+linuxarm:
+	$(MAKE) TARGET_OS=linuxarm
 
-# Ensure directories exist (SIMPLE portable rule)
+linuxarm64:
+	$(MAKE) TARGET_OS=linuxarm64
+
+# ----------------------------------------------------------------------------
+# Build rules - unchanged
+# ----------------------------------------------------------------------------
 $(BINDIR) $(OBJDIR):
 	$(MKDIR_P) $@
 
-# Link
 $(EXEC): $(BINDIR) $(OBJDIR) $(OBJECTS)
 	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
 
-# Windows resource compilation
-ifeq ($(TARGET_OS), win32)
+ifneq (,$(filter win32 winarm64,$(TARGET_OS)))
 $(RES): version.rc | $(OBJDIR)
 	$(RC) $(RCFLAGS) -i $< -o $@
 endif
 
-# Compile
 $(OBJDIR)/%.o: src/%.c $(HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# ----------------------------------------------------------------------------
-# Utility targets
-# ----------------------------------------------------------------------------
 clean:
 	$(RM) bin obj
 	@echo "Cleaned bin/ and obj/"
@@ -145,14 +193,13 @@ debug: all
 info:
 	@echo "TARGET_OS = $(TARGET_OS)"
 	@echo "CC        = $(CC)"
-	@echo "Sources   = $(notdir $(SOURCES))"
-	@echo "Objects   = $(notdir $(OBJECTS))"
 	@echo "Target    = $(EXEC)"
 
 help:
-	@echo "make               # Auto-detect host (Windows->win32, Linux->linux)"
-	@echo "make win32         # Windows 32-bit  -> bin/win/pingdd.exe"
-	@echo "make linux         # Linux native    -> bin/linux/pingdd"
-	@echo "make clean         # Remove bin/ and obj/"
-	@echo "make debug         # Build with debug info"
-	@echo "make info          # Show build configuration"
+	@echo "make                     # Auto-detect host"
+	@echo "make win32               # Windows x86      -> bin/win-x86/pingdd.exe"
+	@echo "make winarm64            # Windows ARM64    -> bin/win-arm64/pingdd.exe"
+	@echo "make linux               # Linux native     -> bin/linux/pingdd"
+	@echo "make linuxarm            # Linux ARM 32-bit -> bin/linux-arm/pingdd"
+	@echo "make linuxarm64          # Linux ARM64      -> bin/linux-arm64/pingdd"
+	@echo "make STATIC=0 <target>   # Disable -static if toolchain lacks static libs"
