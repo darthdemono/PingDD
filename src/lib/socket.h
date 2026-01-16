@@ -1,68 +1,90 @@
 /**
  * @file socket.h
- * @brief socket interface for PingDD
- * @author DarthDemono
+ * @brief Socket and hostname resolution functions.
+ *
+ * Declares the functions used to resolve a destination to an IP address and to
+ * attempt a TCP connection with a timeout.
  */
-
-#ifndef SOCKET_H
-#define SOCKET_H
+#ifndef PINGDD_SOCKET_H
+#define PINGDD_SOCKET_H
 
 #include "standard.h"
 
-#ifndef INVALID_SOCKET /* Only define if not already defined */
+/* Socket constants (define only if not provided by the platform headers). */
+#ifndef INVALID_SOCKET
 #define INVALID_SOCKET -1
 #endif
+
 #ifndef SOCKET_ERROR
 #define SOCKET_ERROR -1
 #endif
 
-/* Define socket constants */
 #ifdef _WIN32
+/* Windows socket headers are expected to be provided by standard.h or other
+ * project headers.
+ */
 #else
-#include <sys/socket.h>
 #include <netdb.h>
 #include <sys/select.h>
-#define INVALID_SOCKET -1
-#define SOCKET_ERROR -1
+#include <sys/socket.h>
+
 #endif
 
-/* Function prototypes using host_t */
 /**
- * @brief Get human-readable name for error/result codes
- * @param type Error/result code
- * @return Constant string describing the type
+ * @brief Get a human-readable name for a PingDD result/error code.
+ *
+ * @param[in] type Result/error code.
+ * @return Constant string describing the code.
  */
 pcc_t GetFriendlyTypeName(int32_t const type);
 
 /**
- * @brief Establish TCP connection with timeout
- * @param host Target host information
- * @param timeout Timeout in milliseconds
- * @param rtt Output: round-trip time in seconds
- * @return SUCCESS or error code
+ * @brief Attempt a connection to the host with a timeout.
+ *
+ * @param[in]  host       Target host information (must contain an IPv4 address
+ * string and port).
+ * @param[in]  timeout_ms Timeout in milliseconds.
+ * @param[out] rtt        Connection time in seconds.
+ *
+ * @retval SUCCESS               Connection succeeded.
+ * @retval PINGDD_SOCKET_TIMEOUT Connection attempt timed out.
+ * @retval PINGDD_SOCKET_CLOSED  Connection was refused (closed port).
+ * @retval PINGDD_SOCKET_FAILURE Socket operation failed.
+ * @retval PINGDD_INVALID_ARGS   Invalid input arguments.
  */
-int32_t Connect(const host_t *const host, uint32_t const timeout_ms, double *const rtt);
+int32_t Connect(const host_t *const host, uint32_t const timeout_ms,
+                double *const rtt);
+
 /**
- * @brief Resolve hostname to IP address
- * @param destination Hostname or IP address
- * @param host Output: resolved host structure
- * @return SUCCESS or error code
+ * @brief Resolve a destination hostname to an IPv4 address.
+ *
+ * @param[in]  destination Hostname or IP address string.
+ * @param[out] host        Output host structure to fill.
+ *
+ * @retval SUCCESS              Resolve succeeded.
+ * @retval PINGDD_SOCKET_RESOLVE Resolve failed.
+ * @retval PINGDD_INVALID_ARGS   Invalid input arguments.
  */
 int32_t Resolve(pcc_t const destination, host_t *const host);
 
 /**
- * @brief Configure port and protocol type
- * @param port TCP/UDP port number
- * @param type Protocol type (IPPROTO_TCP, etc.)
- * @param host Host structure to configure
+ * @brief Set the port and protocol type in a host structure.
+ *
+ * @param[in]  port TCP/UDP port number.
+ * @param[in]  type Protocol identifier (e.g., IPPROTO_TCP, IPPROTO_UDP).
+ * @param[out] host Host structure to configure.
+ *
+ * @note If @p host is NULL, the function does nothing.
  */
-void SetPortAndType(uint16_t const port, int32_t const type, host_t *const host);
+void SetPortAndType(uint16_t const port, int32_t const type,
+                    host_t *const host);
 
 /**
- * @brief Get socket protocol type constant
- * @param type Protocol identifier
- * @return Socket type constant
+ * @brief Get the socket type constant for a protocol identifier.
+ *
+ * @param[in] type Protocol identifier (e.g., IPPROTO_TCP, IPPROTO_UDP).
+ * @return Socket type constant (e.g., SOCK_STREAM or SOCK_DGRAM).
  */
 int32_t GetSocketType(int32_t const type);
 
-#endif /* SOCKET_H */
+#endif /* PINGDD_SOCKET_H */

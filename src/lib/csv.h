@@ -1,41 +1,51 @@
 /**
  * @file csv.h
- * @brief CSV logging interface for PingDD
- * @author DarthDemono
+ * @brief CSV file output functions.
+ *
+ * Declares the functions used to create a CSV filename and to write CSV
+ * header/data rows.
  */
-#ifndef CSVH
-#define CSVH
+#ifndef PINGDD_CSV_H
+#define PINGDD_CSV_H
 
-#include "standard.h"
-#include "host.h"
+#include <stdio.h>
+
 #include "arguments.h"
+#include "host.h"
+#include "standard.h"
 
 /**
- * @brief Generate CSV filename: "PingDD-{host}-{datetime}.csv"
- * @param args Command line arguments containing destination host
- * @return Static buffer containing filename (never NULL)
+ * @brief Build a filename for a new CSV log file.
+ *
+ * @param[in] args Parsed arguments (destination may be used in the filename).
+ * @return Pointer to an internal static buffer containing the filename.
+ *
+ * @warning The returned buffer is static and will be overwritten on the next
+ * call.
  */
 char *GenerateCSVFilename(const arguments_t *const args);
 
 /**
- * @brief Write CSV header row
- * @param file Open CSV file handle
- * @param host Target host information
- * @return 0 on success, -1 on error
+ * @brief Write the CSV column header line.
+ *
+ * @param[in,out] file Open CSV file handle.
+ * @param[in]     host Target host information.
+ * @retval 0  Success.
+ * @retval -1 Error (invalid input).
  */
 int32_t WriteCSVHeader(FILE *const file, const host_t *const host);
 
 /**
- * @brief Write single CSV data row
- * @param file Open CSV file handle
- * @param host Target host information
- * @param rtt Connection time in seconds
- * @param datetime ISO 8601 timestamp string
- * @return 0 on success, -1 on error
+ * @brief Write one CSV record line.
+ *
+ * @param[in,out] file     Open CSV file handle.
+ * @param[in]     host     Target host information.
+ * @param[in]     rtt      Connection time in seconds.
+ * @param[in]     datetime ISO 8601 timestamp string.
+ * @retval 0  Success.
+ * @retval -1 Error (invalid input).
  */
-int32_t WriteCSVRow(FILE *const file,
-                    const host_t *const host,
-                    const double rtt,
-                    const char *datetime);
+int32_t WriteCSVRow(FILE *const file, const host_t *const host,
+                    const double rtt, const char *datetime);
 
-#endif /* CSVH */
+#endif /* PINGDD_CSV_H */

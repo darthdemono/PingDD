@@ -3,6 +3,14 @@
 obj/
 bin/
 
+# Doxygen
+html/
+search/
+*.html
+*.js
+*.dot
+*.tag
+
 # Compiled Object files
 *.o
 *.obj
