@@ -14,7 +14,7 @@
 #include <string.h>
 
 static int32_t InitializeWinsock(void);
-static void CloseSocket(int32_t socket_fd);
+static void CloseSocket(pingdd_socket_t socket_fd);
 
 pcc_t GetFriendlyTypeName(int32_t const type) {
   switch (type) {
@@ -54,7 +54,7 @@ int32_t GetSocketType(int32_t const type) {
 }
 
 int32_t Resolve(pcc_t const destination, host_t *const host) {
-  struct addrinfo hints = {0};
+  struct addrinfo hints = (struct addrinfo){0};
   struct addrinfo *result = NULL;
   int32_t ret = 0;
 
@@ -98,10 +98,10 @@ int32_t Resolve(pcc_t const destination, host_t *const host) {
 
 int32_t Connect(host_t const *const host, uint32_t const timeout_ms,
                 double *const rtt) {
-  int32_t client_socket = INVALID_SOCKET;
-  struct sockaddr_in server_addr = {0};
-  struct timeval timeout = {0};
-  pingdd_timer_t timer = {0};
+  pingdd_socket_t client_socket = PINGDD_INVALID_SOCKET;
+  struct sockaddr_in server_addr = (struct sockaddr_in){0};
+  struct timeval timeout = (struct timeval){0};
+  pingdd_timer_t timer = (pingdd_timer_t){0};
   fd_set readfds, writefds;
 
   if ((host == NULL) || (rtt == NULL)) {
@@ -113,7 +113,7 @@ int32_t Connect(host_t const *const host, uint32_t const timeout_ms,
   }
 
   client_socket = socket(AF_INET, GetSocketType(host->Type), 0);
-  if (client_socket == (int32_t)INVALID_SOCKET) {
+  if (client_socket == PINGDD_INVALID_SOCKET) {
     return PINGDD_SOCKET_FAILURE;
   }
 
@@ -157,24 +157,33 @@ int32_t Connect(host_t const *const host, uint32_t const timeout_ms,
     }
   }
 
-  timeout.tv_sec = timeout_ms / 1000U;
-  timeout.tv_usec = (timeout_ms % 1000U) * 1000U;
+  timeout.tv_sec = (long)(timeout_ms / 1000U);
+  timeout.tv_usec = (long)((timeout_ms % 1000U) * 1000U);
 
   FD_ZERO(&readfds);
   FD_ZERO(&writefds);
   FD_SET(client_socket, &readfds);
   FD_SET(client_socket, &writefds);
 
-  if (select(client_socket + 1, &readfds, &writefds, NULL, &timeout) != 1) {
-    CloseSocket(client_socket);
-    return PINGDD_SOCKET_TIMEOUT;
+  {
+    int sel = 0;
+#ifdef _WIN32
+    /* Winsock ignores the first parameter of select(). */
+    sel = select(0, &readfds, &writefds, NULL, &timeout);
+#else
+    sel = select(client_socket + 1, &readfds, &writefds, NULL, &timeout);
+#endif
+    if (sel != 1) {
+      CloseSocket(client_socket);
+      return PINGDD_SOCKET_TIMEOUT;
+    }
   }
 
   *rtt = Timer_Stop(&timer);
 
   {
     int32_t error = 0;
-    socklen_t len = sizeof(error);
+    socklen_t len = (socklen_t)sizeof(error);
     if (getsockopt(client_socket, SOL_SOCKET, SO_ERROR, (char *)&error, &len) <
         0) {
       CloseSocket(client_socket);
@@ -207,7 +216,7 @@ static int32_t InitializeWinsock(void) {
   return SUCCESS;
 }
 
-static void CloseSocket(int32_t socket_fd) {
+static void CloseSocket(pingdd_socket_t socket_fd) {
 #ifdef _WIN32
   closesocket(socket_fd);
 #else

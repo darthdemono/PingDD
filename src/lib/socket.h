@@ -10,24 +10,18 @@
 
 #include "standard.h"
 
-/* Socket constants (define only if not provided by the platform headers). */
-#ifndef INVALID_SOCKET
-#define INVALID_SOCKET -1
-#endif
-
-#ifndef SOCKET_ERROR
-#define SOCKET_ERROR -1
-#endif
-
 #ifdef _WIN32
-/* Windows socket headers are expected to be provided by standard.h or other
- * project headers.
- */
+typedef SOCKET pingdd_socket_t;
+#define PINGDD_INVALID_SOCKET INVALID_SOCKET
+#define PINGDD_SOCKET_ERROR SOCKET_ERROR
 #else
 #include <netdb.h>
 #include <sys/select.h>
 #include <sys/socket.h>
 
+typedef int pingdd_socket_t;
+#define PINGDD_INVALID_SOCKET (-1)
+#define PINGDD_SOCKET_ERROR (-1)
 #endif
 
 /**
@@ -42,7 +36,7 @@ pcc_t GetFriendlyTypeName(int32_t const type);
  * @brief Attempt a connection to the host with a timeout.
  *
  * @param[in]  host       Target host information (must contain an IPv4 address
- * string and port).
+ *                        string and port).
  * @param[in]  timeout_ms Timeout in milliseconds.
  * @param[out] rtt        Connection time in seconds.
  *
@@ -61,7 +55,7 @@ int32_t Connect(const host_t *const host, uint32_t const timeout_ms,
  * @param[in]  destination Hostname or IP address string.
  * @param[out] host        Output host structure to fill.
  *
- * @retval SUCCESS              Resolve succeeded.
+ * @retval SUCCESS               Resolve succeeded.
  * @retval PINGDD_SOCKET_RESOLVE Resolve failed.
  * @retval PINGDD_INVALID_ARGS   Invalid input arguments.
  */
