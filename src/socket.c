@@ -145,7 +145,7 @@ int32_t Connect(host_t const *const host, uint32_t const timeout_ms,
   Timer_Start(&timer);
 
   if (connect(client_socket, (struct sockaddr *)&server_addr,
-              sizeof(server_addr)) == SOCKET_ERROR) {
+              sizeof(server_addr)) == PINGDD_SOCKET_ERROR) {
 #ifdef _WIN32
     if (WSAGetLastError() != WSAEWOULDBLOCK)
 #else

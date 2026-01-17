@@ -55,7 +55,7 @@ int32_t Connect(const host_t *const host, uint32_t const timeout_ms,
  * @param[in]  destination Hostname or IP address string.
  * @param[out] host        Output host structure to fill.
  *
- * @retval SUCCESS               Resolve succeeded.
+ * @retval SUCCESS              Resolve succeeded.
  * @retval PINGDD_SOCKET_RESOLVE Resolve failed.
  * @retval PINGDD_INVALID_ARGS   Invalid input arguments.
  */

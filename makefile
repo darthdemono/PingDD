@@ -68,7 +68,7 @@ RES     =
 
 ifeq ($(TARGET_OS), win32)
     CC      = i686-w64-mingw32-gcc
-    RC      = windres
+    RC      = i686-w64-mingw32-windres
     CFLAGS  = $(CFLAGS_COMMON) $(CFLAGS_STATIC)
     LDFLAGS = -lws2_32
     BINDIR  = bin/win-x86
@@ -78,10 +78,8 @@ ifeq ($(TARGET_OS), win32)
     RCFLAGS = -I.
 
 else ifeq ($(TARGET_OS), winarm64)
-    # Windows ARM64 note: LLVM-MinGW supports targeting ARM/ARM64 Windows well. [web:376][web:374]
-    # If you don't have aarch64-w64-mingw32-gcc, you can also use clang --target=aarch64-w64-mingw32. [web:376]
     CC      = aarch64-w64-mingw32-gcc
-    RC      = windres
+    RC      = aarch64-w64-mingw32-windres
     CFLAGS  = $(CFLAGS_COMMON) $(CFLAGS_STATIC)
     LDFLAGS = -lws2_32
     BINDIR  = bin/win-arm64
