@@ -1,6 +1,6 @@
 /**
  * @file standard.h
- * @brief Common includes, types, and constants used across PingDD.
+ * @brief Standard / Common includes, types, and constants used across PingDD.
  *
  * This header provides:
  * - Standard and platform-specific includes.
