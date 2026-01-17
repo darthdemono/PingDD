@@ -68,25 +68,25 @@ RES     =
 
 ifeq ($(TARGET_OS), win32)
     CC      = i686-w64-mingw32-gcc
-    RC      = i686-w64-mingw32-windres
+    RC      = llvm-windres
     CFLAGS  = $(CFLAGS_COMMON) $(CFLAGS_STATIC)
     LDFLAGS = -lws2_32
     BINDIR  = bin/win-x86
     OBJDIR  = obj/win-x86
     EXEC    = $(BINDIR)/pingdd.exe
     RES     = $(OBJDIR)/version.res.o
-    RCFLAGS = -I.
+    RCFLAGS = --target=i686-w64-mingw32 -I.
 
 else ifeq ($(TARGET_OS), winarm64)
     CC      = aarch64-w64-mingw32-gcc
-    RC      = aarch64-w64-mingw32-windres
+    RC      = llvm-windres
     CFLAGS  = $(CFLAGS_COMMON) $(CFLAGS_STATIC)
     LDFLAGS = -lws2_32
     BINDIR  = bin/win-arm64
     OBJDIR  = obj/win-arm64
     EXEC    = $(BINDIR)/pingdd.exe
     RES     = $(OBJDIR)/version.res.o
-    RCFLAGS = -I.
+    RCFLAGS = --target=aarch64-w64-mingw32 -I.
 
 else ifeq ($(TARGET_OS), linux)
     CC      = gcc

@@ -25,7 +25,7 @@ typedef int pingdd_socket_t;
 #endif
 
 /**
- * @brief Get a human-readable name for a PingDD result/error code.
+ * @brief Get a human-readable name for a PingDD result or error code.
  *
  * @param[in] type Result/error code.
  * @return Constant string describing the code.
