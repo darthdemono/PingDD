@@ -14,9 +14,11 @@
 #include "socket.h"
 #include "standard.h"
 #include "stats.h"
+#include "targets.h"
 #include "timer.h"
 #include "version.h"
 
+#include <math.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -28,6 +30,7 @@
 #include <io.h>
 #include <windows.h>
 #else
+#include <pthread.h>
 #include <unistd.h>
 #endif
 
@@ -189,8 +192,13 @@ static void JsonEscape(pcc_t const src, char *const dst, size_t const dst_size) 
 /** @brief Print one human-readable probe result line. */
 static void PrintProbeHuman(int32_t result, unsigned long seq, pcc_t ip,
                             double rtt, pcc_t proto, bool show_port,
-                            uint16_t port, pcc_t datetime) {
+                            uint16_t port, pcc_t datetime, pcc_t prefix) {
   char buf[96U] = {0};
+
+  if (prefix != NULL) {
+    (void)snprintf(buf, sizeof(buf), "[%s] ", prefix);
+    FormattedPrint(PRINT_WHITE, buf);
+  }
 
   if (result == SUCCESS) {
     FormattedPrint(PRINT_WHITE, "Connected to  ");
@@ -226,13 +234,15 @@ static void PrintProbeHuman(int32_t result, unsigned long seq, pcc_t ip,
 /** @brief Print one probe result as a compact JSON object. */
 static void PrintProbeJson(int32_t result, unsigned long seq, pcc_t ip,
                            double rtt, pcc_t proto, bool show_port,
-                           uint16_t port, pcc_t datetime) {
+                           uint16_t port, pcc_t datetime, pcc_t host) {
   char ip_esc[80U] = {0};
+  char host_esc[280U] = {0};
   JsonEscape(ip, ip_esc, sizeof(ip_esc));
+  JsonEscape(host, host_esc, sizeof(host_esc));
 
-  (void)printf("{\"seq\":%lu,\"timestamp\":\"%s\",\"ip\":\"%s\",\"proto\":\"%s\""
-               ",",
-               seq, datetime, ip_esc, proto);
+  (void)printf("{\"seq\":%lu,\"timestamp\":\"%s\",\"host\":\"%s\",\"ip\":\"%s\","
+               "\"proto\":\"%s\",",
+               seq, datetime, host_esc, ip_esc, proto);
   if (show_port) {
     (void)printf("\"port\":%u,", (unsigned)port);
   } else {
@@ -441,19 +451,391 @@ static int RunLoadTestMode(const arguments_t *const args, host_t *const host) {
   return EXIT_SUCCESS;
 }
 
+/** @brief Probe one target once, storing the outcome in its scratch fields. */
+static void ProbeOne(probe_target_t *t, uint32_t timeout) {
+  double rtt = 0.0;
+  char ip[64] = {0};
+  t->LastResult = Connect(&t->Resolved, timeout, &rtt, ip, sizeof(ip));
+  t->LastRtt = rtt;
+  (void)strncpy(t->LastIp, ip, sizeof(t->LastIp) - 1U);
+  t->LastIp[sizeof(t->LastIp) - 1U] = '\0';
+}
+
+typedef struct {
+  probe_target_t *T;
+  uint32_t Timeout;
+} cyc_arg_t;
+
+#ifdef _WIN32
+static DWORD WINAPI CycWorker(LPVOID p) {
+  cyc_arg_t *a = (cyc_arg_t *)p;
+  ProbeOne(a->T, a->Timeout);
+  return 0;
+}
+#else
+static void *CycWorker(void *p) {
+  cyc_arg_t *a = (cyc_arg_t *)p;
+  ProbeOne(a->T, a->Timeout);
+  return NULL;
+}
+#endif
+
+/** @brief Print the combined (all-targets) human roll-up. */
+static void PrintCombinedHuman(target_list_t *list) {
+  char buf[160U] = {0};
+  unsigned long long att = 0, con = 0, fail = 0;
+  double total = 0.0, totalsq = 0.0, mn = 0.0, mx = 0.0;
+  int have = 0;
+  unsigned long outages = 0;
+  bool any_down = false;
+  size_t i = 0;
+  double loss = 0.0;
+  double avg = 0.0, var = 0.0;
+  pcc_t verdict = "HEALTHY";
+  int32_t vcolor = PRINT_GREEN;
+
+  for (i = 0; i < list->Count; i++) {
+    stats_t *s = &list->Items[i].Stats;
+    if (!list->Items[i].ResolveOk) {
+      continue;
+    }
+    att += s->Attempts;
+    con += s->Connects;
+    fail += s->Failures;
+    total += s->Total;
+    totalsq += s->TotalSq;
+    if (s->Connects > 0U) {
+      if ((have == 0) || (s->Minimum < mn)) {
+        mn = s->Minimum;
+      }
+      if (s->Maximum > mx) {
+        mx = s->Maximum;
+      }
+      have = 1;
+    }
+    outages += list->Items[i].Diag.Outages;
+    if (list->Items[i].Diag.IsDown) {
+      any_down = true;
+    }
+  }
+
+  if (att > 0ULL) {
+    loss = ((double)fail / (double)att) * 100.0;
+  }
+  if (con > 0ULL) {
+    avg = total / (double)con;
+    var = (totalsq / (double)con) - (avg * avg);
+    if (var < 0.0) {
+      var = 0.0;
+    }
+  }
+  if (any_down || (loss >= 100.0)) {
+    verdict = "DOWN";
+    vcolor = PRINT_RED;
+  } else if ((loss > 5.0) || (outages > 0U)) {
+    verdict = "DEGRADED";
+    vcolor = PRINT_YELLOW;
+  }
+
+  (void)snprintf(buf, sizeof(buf), "\n== combined (%zu targets) ==\n",
+                 list->Count);
+  FormattedPrint(PRINT_YELLOW, buf);
+  ResetColor();
+  (void)snprintf(buf, sizeof(buf),
+                 "        %llu sent, %llu received, %llu lost (%.2f%% loss)\n",
+                 att, con, fail, loss);
+  FormattedPrint(PRINT_BLUE, buf);
+  if (have != 0) {
+    (void)snprintf(buf, sizeof(buf),
+                   "        rtt min/avg/max/mdev = %.4f/%.4f/%.4f/%.4f ms\n",
+                   mn * 1000.0, avg * 1000.0, mx * 1000.0, sqrt(var) * 1000.0);
+    FormattedPrint(PRINT_BLUE, buf);
+  }
+  FormattedPrint(PRINT_BLUE, "        Verdict        = ");
+  (void)snprintf(buf, sizeof(buf), "%s\n", verdict);
+  FormattedPrint(vcolor, buf);
+  ResetColor();
+}
+
+/** @brief Run the multi-target probe loop (sequential or concurrent). */
+static int ProbeLoop(const arguments_t *args, target_list_t *list,
+                     double dns_ms) {
+  bool multi = (list->Count > 1U);
+  bool silent_diag = args->Quiet || args->Json || multi;
+  pingdd_timer_t total = {0};
+  probe_target_t **rt = NULL;
+  cyc_arg_t *cargs = NULL;
+#ifdef _WIN32
+  HANDLE *threads = NULL;
+#else
+  pthread_t *threads = NULL;
+#endif
+  size_t rc = 0;
+  size_t i = 0;
+  unsigned long cycle = 0U;
+
+  rt = (probe_target_t **)calloc(list->Count, sizeof(*rt));
+  if (rt == NULL) {
+    return EXIT_FAILURE;
+  }
+  for (i = 0; i < list->Count; i++) {
+    probe_target_t *t = &list->Items[i];
+    Diag_Init(&t->Diag, silent_diag);
+    Diag_SetDns(&t->Diag, dns_ms, !t->ResolveOk);
+    if (t->ResolveOk) {
+      rt[rc++] = t;
+    }
+  }
+
+  if (args->Concurrent && (rc > 0U)) {
+    cargs = (cyc_arg_t *)calloc(rc, sizeof(*cargs));
+#ifdef _WIN32
+    threads = (HANDLE *)calloc(rc, sizeof(HANDLE));
+#else
+    threads = (pthread_t *)calloc(rc, sizeof(pthread_t));
+#endif
+    if ((cargs == NULL) || (threads == NULL)) {
+      free(rt);
+      free(cargs);
+      free(threads);
+      return EXIT_FAILURE;
+    }
+  }
+
+  /* Header */
+  if (args->Json) {
+    for (i = 0; i < list->Count; i++) {
+      probe_target_t *t = &list->Items[i];
+      char he[280] = {0};
+      char ie[80] = {0};
+      JsonEscape(t->Host, he, sizeof(he));
+      JsonEscape(t->Resolved.IPAddress, ie, sizeof(ie));
+      (void)printf("{\"target\":{\"host\":\"%s\",\"ip\":\"%s\",", he, ie);
+      if (t->Type == IPPROTO_ICMP) {
+        (void)printf("\"port\":null,");
+      } else {
+        (void)printf("\"port\":%u,", (unsigned)t->Port);
+      }
+      (void)printf("\"proto\":\"%s\",\"resolved\":%s}}\n",
+                   ProtoLabel(t->Type, t->Resolved.IPAddress),
+                   t->ResolveOk ? "true" : "false");
+    }
+  } else {
+    char line[420] = {0};
+    (void)snprintf(line, sizeof(line), "%s v%s\n", NAME, PINGDD_VERSION_FULL);
+    FormattedPrint(PRINT_BLUE, line);
+    if (multi) {
+      (void)snprintf(line, sizeof(line), "Probing %zu targets:\n", list->Count);
+      FormattedPrint(PRINT_YELLOW, line);
+      for (i = 0; i < list->Count; i++) {
+        probe_target_t *t = &list->Items[i];
+        (void)snprintf(line, sizeof(line), "  [%s]%s\n", t->Label,
+                       t->ResolveOk ? "" : "  (unresolved)");
+        FormattedPrint(t->ResolveOk ? PRINT_GREEN : PRINT_RED, line);
+      }
+    } else {
+      probe_target_t *t = &list->Items[0];
+      char ts[64] = {0};
+      pcc_t proto = ProtoLabel(t->Type, t->Resolved.IPAddress);
+      GetTimestampString(ts, sizeof(ts));
+      FormattedPrint(PRINT_YELLOW, "Connecting to ");
+      FormattedPrint(PRINT_GREEN, t->Host);
+      FormattedPrint(PRINT_YELLOW, " on ");
+      FormattedPrint(PRINT_GREEN, proto);
+      if (t->Type != IPPROTO_ICMP) {
+        (void)snprintf(line, sizeof(line), " %u", (unsigned)t->Port);
+        FormattedPrint(PRINT_GREEN, line);
+      }
+      FormattedPrint(PRINT_YELLOW, " on ");
+      FormattedPrint(PRINT_GREEN, ts);
+      FormattedPrint(PRINT_YELLOW, ":\n");
+    }
+    ResetColor();
+  }
+  (void)fflush(stdout);
+
+  Timer_Start(&total);
+
+  while ((g_interrupted == 0) && ((args->Count == -1) || (cycle < (unsigned long)args->Count))) {
+    bool interrupted_now = false;
+    size_t k = 0;
+
+    if ((args->Deadline > 0U) && (ElapsedMs(&total) >= (double)args->Deadline)) {
+      break;
+    }
+
+    if (args->Concurrent && (rc > 0U)) {
+      size_t spawned = 0;
+      for (k = 0; k < rc; k++) {
+        cargs[k].T = rt[k];
+        cargs[k].Timeout = args->Timeout;
+#ifdef _WIN32
+        threads[k] = CreateThread(NULL, 0, CycWorker, &cargs[k], 0, NULL);
+        if (threads[k] == NULL) {
+          ProbeOne(rt[k], args->Timeout);
+        } else {
+          spawned++;
+        }
+#else
+        if (pthread_create(&threads[k], NULL, CycWorker, &cargs[k]) != 0) {
+          ProbeOne(rt[k], args->Timeout);
+        } else {
+          spawned++;
+        }
+#endif
+      }
+      (void)spawned;
+      for (k = 0; k < rc; k++) {
+#ifdef _WIN32
+        if (threads[k] != NULL) {
+          (void)WaitForSingleObject(threads[k], INFINITE);
+          (void)CloseHandle(threads[k]);
+        }
+#else
+        (void)pthread_join(threads[k], NULL);
+#endif
+      }
+    } else {
+      for (k = 0; k < rc; k++) {
+        ProbeOne(rt[k], args->Timeout);
+        if (g_interrupted != 0) {
+          break;
+        }
+      }
+    }
+
+    /* Process results in target order. */
+    for (k = 0; k < rc; k++) {
+      probe_target_t *t = rt[k];
+      int32_t r = t->LastResult;
+      char datetime[64] = {0};
+      pcc_t proto = ProtoLabel(t->Type, t->LastIp);
+      bool show_port = (t->Type != IPPROTO_ICMP);
+      unsigned long seq = t->Stats.Attempts;
+      bool success = (r == SUCCESS);
+
+      if (r == PINGDD_INTERRUPTED) {
+        interrupted_now = true;
+        continue;
+      }
+
+      GetTimestampString(datetime, sizeof(datetime));
+
+      if (success) {
+        Stats_AddSample(&t->Stats, t->LastRtt);
+        t->Stats.Connects++;
+        if (args->Audible) {
+          (void)printf("\a");
+        }
+        if (args->CSVOutput && (csv_file != NULL)) {
+          (void)WriteCSVRow(csv_file, &t->Resolved, t->LastRtt, datetime,
+                            t->LastIp, proto);
+        }
+      } else {
+        t->Stats.Failures++;
+      }
+      t->Stats.Attempts++;
+
+      if (!args->Quiet) {
+        if (args->Json) {
+          PrintProbeJson(r, seq, t->LastIp, t->LastRtt, proto, show_port,
+                         t->Port, datetime, t->Host);
+        } else {
+          PrintProbeHuman(r, seq, t->LastIp, t->LastRtt, proto, show_port,
+                          t->Port, datetime, multi ? t->Label : NULL);
+        }
+      }
+      Diag_Observe(&t->Diag, success, t->LastRtt);
+    }
+    (void)fflush(stdout);
+
+    if ((g_interrupted != 0) || interrupted_now) {
+      break;
+    }
+
+    cycle++;
+    if ((args->Count != -1) && (cycle >= (unsigned long)args->Count)) {
+      break;
+    }
+    if ((args->Deadline > 0U) && (ElapsedMs(&total) >= (double)args->Deadline)) {
+      break;
+    }
+    delay_ms((args->Rate > 0U) ? args->Rate : 50U);
+  }
+
+  if ((g_interrupted != 0) && !args->Json) {
+    FormattedPrint(PRINT_YELLOW, "\n^C interrupted\n");
+    ResetColor();
+  }
+
+  /* Per-target summaries. */
+  for (i = 0; i < list->Count; i++) {
+    probe_target_t *t = &list->Items[i];
+    if (multi && !args->Json) {
+      char hdr[360] = {0};
+      (void)snprintf(hdr, sizeof(hdr), "\n-- %s --\n", t->Label);
+      FormattedPrint(PRINT_YELLOW, hdr);
+      ResetColor();
+    }
+    if (!t->ResolveOk) {
+      if (!args->Json) {
+        FormattedPrint(PRINT_RED, "        unresolved\n");
+      }
+      continue;
+    }
+    if (args->Json) {
+      PrintSummaryJson(&t->Stats, t->Host);
+      Diag_PrintJson(&t->Diag, &t->Stats);
+    } else {
+      PrintSummaryHuman(&t->Stats);
+      Diag_PrintSummary(&t->Diag, &t->Stats);
+      if (args->Monitor) {
+        char line[96] = {0};
+        double avail = (t->Stats.Attempts > 0U)
+                           ? ((double)t->Stats.Connects /
+                              (double)t->Stats.Attempts) * 100.0
+                           : 0.0;
+        (void)snprintf(line, sizeof(line),
+                       "        Availability   = %.3f%% over %lu probes\n",
+                       avail, (unsigned long)t->Stats.Attempts);
+        FormattedPrint(PRINT_BLUE, line);
+      }
+    }
+  }
+
+  if (multi && !args->Json) {
+    PrintCombinedHuman(list);
+  }
+  (void)fflush(stdout);
+
+  free(rt);
+  free(cargs);
+  free(threads);
+
+  /* Exit non-zero if every probe failed across all targets. */
+  {
+    unsigned long long att = 0, con = 0;
+    for (i = 0; i < list->Count; i++) {
+      att += list->Items[i].Stats.Attempts;
+      con += list->Items[i].Stats.Connects;
+    }
+    if ((att > 0ULL) && (con == 0ULL)) {
+      return EXIT_FAILURE;
+    }
+  }
+  return EXIT_SUCCESS;
+}
+
 /** @brief Program entry point. */
 int main(int argc, char *const *argv) {
   arguments_t args = {0};
-  host_t host = {0};
-  stats_t stats = {0};
-  diag_t diag = {0};
-  pingdd_timer_t total = {0};
+  target_list_t targets = {0};
   pingdd_timer_t dns_timer = {0};
   double dns_ms = 0.0;
-  int32_t resolve_result = 0;
-  unsigned long seq = 0U;
-  int32_t i = 0;
+  char err[256] = {0};
+  size_t resolved = 0;
   bool color = false;
+  int rc = EXIT_SUCCESS;
 
   if (ProcessArguments(argc, argv, &args) != 0) {
     return EXIT_FAILURE;
@@ -475,35 +857,58 @@ int main(int argc, char *const *argv) {
   (void)signal(SIGTERM, SignalHandler);
 #endif
 
-  Stats_Init(&stats);
-  Diag_Init(&diag, args.Quiet || args.Json);
-  SetPortAndType(args.Port, args.Type, &host);
+  /* Optional source-interface binding. */
+  if (args.Interface != NULL) {
+    if (SetSourceInterface(args.Interface, err, sizeof(err)) != (int32_t)SUCCESS) {
+      char msg[320] = {0};
+      (void)snprintf(msg, sizeof(msg), "Error: interface '%s': %s",
+                     args.Interface, err);
+      PrintError(msg);
+      return EXIT_FAILURE;
+    }
+  }
 
-  /* Time DNS resolution so slow/failed name lookups can be diagnosed. */
-  Timer_Start(&dns_timer);
-  resolve_result = Resolve(args.Destination, &host);
-  dns_ms = Timer_Stop(&dns_timer) * 1000.0;
-  Diag_SetDns(&diag, dns_ms, resolve_result != SUCCESS);
-  if (resolve_result != SUCCESS) {
-    PrintError(GetFriendlyTypeName(resolve_result));
+  /* Build the target matrix (hosts x ports x protocols + specs + file). */
+  if (Targets_Build(&args, &targets, err, sizeof(err)) != 0) {
+    char msg[320] = {0};
+    (void)snprintf(msg, sizeof(msg), "Error: %s", err);
+    PrintError(msg);
     return EXIT_FAILURE;
   }
 
-  /* Authorized load testing / resilience: separate path from the probe loop. */
+  /* Resolve all targets (timed, for DNS diagnostics). */
+  Timer_Start(&dns_timer);
+  resolved = Targets_Resolve(&targets);
+  dns_ms = Timer_Stop(&dns_timer) * 1000.0;
+
+  if (resolved == 0U) {
+    PrintError("Error: no targets could be resolved");
+    Targets_Free(&targets);
+    return EXIT_FAILURE;
+  }
+
+  /* Authorized load testing / resilience: single-target only. */
   if (args.LoadTest || args.Resilience) {
-    int rc = RunLoadTestMode(&args, &host);
-    Stats_Free(&stats);
+    if (targets.Count != 1U) {
+      PrintError("Error: --load-test/--resilience support a single target");
+      Targets_Free(&targets);
+      return EXIT_FAILURE;
+    }
+    rc = RunLoadTestMode(&args, &targets.Items[0].Resolved);
+    Targets_Free(&targets);
     return rc;
   }
 
+  /* CSV setup (filename derived from the first destination). */
   if (args.CSVOutput) {
     char *csv_filename = GenerateCSVFilename(&args);
     csv_file = fopen(csv_filename, "w");
     if (csv_file == NULL) {
       PrintError("Failed to create CSV file");
+      Targets_Free(&targets);
       return EXIT_FAILURE;
     }
-    (void)WriteCSVHeader(csv_file, &host);
+    (void)WriteCSVHeader(csv_file, &targets.Items[0].Resolved);
     if (!args.Json) {
       FormattedPrint(PRINT_YELLOW, "CSV logging: ");
       FormattedPrint(PRINT_GREEN, csv_filename);
@@ -511,158 +916,12 @@ int main(int argc, char *const *argv) {
     }
   }
 
-  /* Header */
-  {
-    bool is_icmp = (host.Type == IPPROTO_ICMP);
-    pcc_t proto = ProtoLabel(host.Type, host.IPAddress);
-
-    if (args.Json) {
-      char host_esc[280U] = {0};
-      char ip_esc[80U] = {0};
-      JsonEscape(host.Hostname, host_esc, sizeof(host_esc));
-      JsonEscape(host.IPAddress, ip_esc, sizeof(ip_esc));
-      (void)printf("{\"target\":{\"host\":\"%s\",\"ip\":\"%s\",", host_esc,
-                   ip_esc);
-      if (is_icmp) {
-        (void)printf("\"port\":null,");
-      } else {
-        (void)printf("\"port\":%u,", (unsigned)host.Port);
-      }
-      (void)printf("\"proto\":\"%s\"}}\n", proto);
-    } else {
-      char line[512U] = {0};
-      char ts[64U] = {0};
-
-      /* Version banner (name/author removed). */
-      (void)snprintf(line, sizeof(line), "%s v%s\n", NAME, PINGDD_VERSION_FULL);
-      FormattedPrint(PRINT_BLUE, line);
-
-      /* Classic "Connecting to <host> on <PROTO> [<port>] on <timestamp>:" */
-      GetTimestampString(ts, sizeof(ts));
-      FormattedPrint(PRINT_YELLOW, "Connecting to ");
-      FormattedPrint(PRINT_GREEN, host.Hostname);
-      FormattedPrint(PRINT_YELLOW, " on ");
-      FormattedPrint(PRINT_GREEN, proto);
-      if (!is_icmp) {
-        FormattedPrint(PRINT_YELLOW, " ");
-        (void)snprintf(line, sizeof(line), "%u", (unsigned)host.Port);
-        FormattedPrint(PRINT_GREEN, line);
-      }
-      FormattedPrint(PRINT_YELLOW, " on ");
-      FormattedPrint(PRINT_GREEN, ts);
-      FormattedPrint(PRINT_YELLOW, ":\n");
-      ResetColor();
-    }
-  }
-  (void)fflush(stdout);
-
-  Timer_Start(&total);
-
-  while ((g_interrupted == 0) && ((args.Count == -1) || (i < args.Count))) {
-    int32_t connect_result = 0;
-    double rtt = 0.0;
-    char ip[64U] = {0};
-    char datetime[64U] = {0};
-
-    if ((args.Deadline > 0U) && (ElapsedMs(&total) >= (double)args.Deadline)) {
-      break;
-    }
-
-    connect_result = Connect(&host, args.Timeout, &rtt, ip, sizeof(ip));
-
-    if ((g_interrupted != 0) || (connect_result == PINGDD_INTERRUPTED)) {
-      break;
-    }
-
-    GetTimestampString(datetime, sizeof(datetime));
-
-    {
-      pcc_t proto = ProtoLabel(host.Type, ip);
-      bool show_port = (host.Type != IPPROTO_ICMP);
-
-      if (connect_result == SUCCESS) {
-        Stats_AddSample(&stats, rtt);
-        stats.Connects++;
-        if (args.Audible) {
-          (void)printf("\a");
-        }
-        if (args.CSVOutput && (csv_file != NULL)) {
-          (void)WriteCSVRow(csv_file, &host, rtt, datetime, ip, proto);
-        }
-      } else {
-        stats.Failures++;
-      }
-      stats.Attempts++;
-
-      if (!args.Quiet) {
-        if (args.Json) {
-          PrintProbeJson(connect_result, seq, ip, rtt, proto, show_port,
-                         host.Port, datetime);
-        } else {
-          PrintProbeHuman(connect_result, seq, ip, rtt, proto, show_port,
-                          host.Port, datetime);
-        }
-      }
-
-      /* Feed the diagnostics engine; it raises live alerts on real
-       * transitions (outage, recovery, sustained latency) and ignores
-       * isolated drops as noise. */
-      Diag_Observe(&diag, connect_result == SUCCESS, rtt);
-    }
-    (void)fflush(stdout);
-
-    seq++;
-    i++;
-
-    if ((args.Count != -1) && (i >= args.Count)) {
-      break; /* no trailing delay after the final probe */
-    }
-    if ((args.Deadline > 0U) && (ElapsedMs(&total) >= (double)args.Deadline)) {
-      break;
-    }
-
-    delay_ms((args.Rate > 0U) ? args.Rate : 50U);
-  }
-
-  /* Graceful Ctrl-C: terminate the in-flight line cleanly and note the cause
-   * before the summary, rather than aborting mid-output. */
-  if ((g_interrupted != 0) && !args.Json) {
-    FormattedPrint(PRINT_YELLOW, "\n^C interrupted\n");
-    ResetColor();
-  }
-
-  /* Summary + diagnostics */
-  if (args.Json) {
-    PrintSummaryJson(&stats, host.Hostname);
-    Diag_PrintJson(&diag, &stats);
-  } else {
-    PrintSummaryHuman(&stats);
-    Diag_PrintSummary(&diag, &stats);
-    if (args.Monitor) {
-      char line[96U] = {0};
-      double avail = (stats.Attempts > 0U)
-                         ? ((double)stats.Connects / (double)stats.Attempts) *
-                               100.0
-                         : 0.0;
-      (void)snprintf(line, sizeof(line),
-                     "        Availability   = %.3f%% over %lu probes\n", avail,
-                     (unsigned long)stats.Attempts);
-      FormattedPrint(PRINT_BLUE, line);
-    }
-  }
-  (void)fflush(stdout);
+  rc = ProbeLoop(&args, &targets, dns_ms);
 
   if ((args.CSVOutput != 0U) && (csv_file != NULL)) {
     (void)fclose(csv_file);
     csv_file = NULL;
   }
-  Stats_Free(&stats);
-
-  /* Exit non-zero when attempts were made but none succeeded, so scripts and
-   * monitoring can detect an unreachable service (mirrors classic ping). */
-  if ((stats.Attempts > 0U) && (stats.Connects == 0U)) {
-    return EXIT_FAILURE;
-  }
-
-  return EXIT_SUCCESS;
+  Targets_Free(&targets);
+  return rc;
 }

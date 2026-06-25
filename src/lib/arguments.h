@@ -12,6 +12,12 @@
 
 #include "standard.h"
 
+/** @brief Maximum positional hosts on the command line. */
+#define MAX_HOSTS 64U
+
+/** @brief Maximum repeated --target specs. */
+#define MAX_TARGET_SPECS 64U
+
 /**
  * @struct arguments_t
  * @brief Stores all parsed command-line options.
@@ -82,6 +88,31 @@ typedef struct {
 
   /** @brief Load/resilience run duration in milliseconds. */
   uint32_t DurationMs;
+
+  /** @brief Positional hosts. */
+  pcc_t Hosts[MAX_HOSTS];
+  /** @brief Number of positional hosts. */
+  size_t HostCount;
+
+  /** @brief Raw port specification (e.g. "80,443,8000-8010"); may be NULL. */
+  pcc_t PortSpec;
+
+  /** @brief Raw protocol list (e.g. "TCP,UDP,ICMP"); NULL means TCP. */
+  pcc_t ProtoSpec;
+
+  /** @brief Repeated --target specs ("host:port/proto"). */
+  pcc_t TargetSpecs[MAX_TARGET_SPECS];
+  /** @brief Number of --target specs. */
+  size_t TargetSpecCount;
+
+  /** @brief --targets file path (one target per line); may be NULL. */
+  pcc_t TargetsFile;
+
+  /** @brief Source interface (IP or name) to bind probes to; may be NULL. */
+  pcc_t Interface;
+
+  /** @brief Probe all targets concurrently each cycle when true. */
+  bool Concurrent;
 } arguments_t;
 
 /**

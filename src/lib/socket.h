@@ -98,6 +98,22 @@ int32_t ReverseResolve(const struct sockaddr *const addr,
 bool IsPrivateAddress(const struct sockaddr *const addr);
 
 /**
+ * @brief Bind subsequent probes to a source interface (by IP or name).
+ *
+ * Accepts a literal source IP (IPv4 or IPv6) or, on POSIX, an interface name
+ * such as "eth0"/"wlan0" (resolved to its address via getifaddrs). Probes then
+ * leave via that interface, enabling wifi-vs-ethernet path comparison.
+ *
+ * @param[in]  spec     Source IP string or interface name.
+ * @param[out] err      Buffer for a human-readable error on failure.
+ * @param[in]  err_size Size of @p err.
+ * @retval SUCCESS              Source set for at least one family.
+ * @retval PINGDD_INVALID_ARGS  Could not resolve the interface/IP.
+ */
+int32_t SetSourceInterface(pcc_t const spec, char *const err,
+                           size_t const err_size);
+
+/**
  * @brief Set the port and protocol type in a host structure.
  *
  * @param[in]  port TCP/UDP port number.

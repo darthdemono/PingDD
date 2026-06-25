@@ -15,15 +15,24 @@
 #include <iphlpapi.h>
 #include <icmpapi.h>
 #else
+#include <ifaddrs.h>
+#include <net/if.h>
 #include <poll.h>
 #include <unistd.h>
 #endif
+
+/* Optional source addresses for interface binding, per family. */
+static struct sockaddr_storage g_src4;
+static struct sockaddr_storage g_src6;
+static int g_src4_set = 0;
+static int g_src6_set = 0;
 
 static int32_t InitializeWinsock(void);
 static void CloseSocket(pingdd_socket_t socket_fd);
 static int32_t MapConnectError(int const err);
 static int WaitWritable(pingdd_socket_t fd, uint32_t timeout_ms);
 static int WaitReadable(pingdd_socket_t fd, uint32_t timeout_ms);
+static int BindSource(pingdd_socket_t fd, int family);
 static int32_t ProbeTcp(const struct sockaddr *addr, socklen_t addrlen,
                         int32_t family, uint32_t timeout_ms, double *rtt);
 static int32_t ProbeUdp(const struct sockaddr *addr, socklen_t addrlen,
@@ -308,6 +317,10 @@ static int32_t ProbeTcp(const struct sockaddr *addr, socklen_t addrlen,
     CloseSocket(fd);
     return PINGDD_SOCKET_FAILURE;
   }
+  if (BindSource(fd, family) != 0) {
+    CloseSocket(fd);
+    return PINGDD_SOCKET_FAILURE;
+  }
 
   Timer_Start(&timer);
 
@@ -381,6 +394,10 @@ static int32_t ProbeUdp(const struct sockaddr *addr, socklen_t addrlen,
     CloseSocket(fd);
     return PINGDD_SOCKET_FAILURE;
   }
+  if (BindSource(fd, family) != 0) {
+    CloseSocket(fd);
+    return PINGDD_SOCKET_FAILURE;
+  }
 
   /* connect() on a UDP socket just pins the peer so we receive ICMP errors. */
   if (connect(fd, addr, addrlen) == PINGDD_SOCKET_ERROR) {
@@ -434,6 +451,112 @@ static int32_t ProbeUdp(const struct sockaddr *addr, socklen_t addrlen,
 
   CloseSocket(fd);
   return SUCCESS;
+}
+
+int32_t SetSourceInterface(pcc_t const spec, char *const err,
+                           size_t const err_size) {
+  struct in_addr a4;
+  struct in6_addr a6;
+
+  if ((spec == NULL) || (spec[0] == '\0')) {
+    return PINGDD_INVALID_ARGS;
+  }
+  if (InitializeWinsock() != SUCCESS) {
+    return PINGDD_SOCKET_FAILURE;
+  }
+
+  /* Literal IPv4 source. */
+  if (inet_pton(AF_INET, spec, &a4) == 1) {
+    struct sockaddr_in *s = (struct sockaddr_in *)&g_src4;
+    memset(&g_src4, 0, sizeof(g_src4));
+    s->sin_family = AF_INET;
+    s->sin_addr = a4;
+    g_src4_set = 1;
+    return SUCCESS;
+  }
+  /* Literal IPv6 source. */
+  if (inet_pton(AF_INET6, spec, &a6) == 1) {
+    struct sockaddr_in6 *s = (struct sockaddr_in6 *)&g_src6;
+    memset(&g_src6, 0, sizeof(g_src6));
+    s->sin6_family = AF_INET6;
+    s->sin6_addr = a6;
+    g_src6_set = 1;
+    return SUCCESS;
+  }
+
+#ifdef _WIN32
+  if (err != NULL) {
+    (void)snprintf(err, err_size,
+                   "interface by name is not supported on Windows; pass a "
+                   "source IP address instead");
+  }
+  return PINGDD_INVALID_ARGS;
+#else
+  /* Interface name: resolve to its IPv4 and/or IPv6 address. */
+  {
+    struct ifaddrs *list = NULL;
+    struct ifaddrs *it = NULL;
+    int found = 0;
+
+    if (getifaddrs(&list) != 0) {
+      if (err != NULL) {
+        (void)snprintf(err, err_size, "getifaddrs failed");
+      }
+      return PINGDD_INVALID_ARGS;
+    }
+    for (it = list; it != NULL; it = it->ifa_next) {
+      if ((it->ifa_addr == NULL) || (it->ifa_name == NULL)) {
+        continue;
+      }
+      if (strcmp(it->ifa_name, spec) != 0) {
+        continue;
+      }
+      if (it->ifa_addr->sa_family == AF_INET) {
+        memcpy(&g_src4, it->ifa_addr, sizeof(struct sockaddr_in));
+        ((struct sockaddr_in *)&g_src4)->sin_port = 0;
+        g_src4_set = 1;
+        found = 1;
+      } else if (it->ifa_addr->sa_family == AF_INET6) {
+        const struct sockaddr_in6 *s6 =
+            (const struct sockaddr_in6 *)it->ifa_addr;
+        /* Skip link-local unless it is the only option. */
+        if (!IN6_IS_ADDR_LINKLOCAL(&s6->sin6_addr) || (g_src6_set == 0)) {
+          memcpy(&g_src6, it->ifa_addr, sizeof(struct sockaddr_in6));
+          ((struct sockaddr_in6 *)&g_src6)->sin6_port = 0;
+          g_src6_set = 1;
+          found = 1;
+        }
+      }
+    }
+    freeifaddrs(list);
+
+    if (found == 0) {
+      if (err != NULL) {
+        (void)snprintf(err, err_size,
+                       "no address found for interface '%s'", spec);
+      }
+      return PINGDD_INVALID_ARGS;
+    }
+    return SUCCESS;
+  }
+#endif
+}
+
+/** @brief Bind a socket to the configured source address for its family. */
+static int BindSource(pingdd_socket_t fd, int family) {
+  if ((family == AF_INET6) && (g_src6_set != 0)) {
+    return (bind(fd, (struct sockaddr *)&g_src6,
+                 (socklen_t)sizeof(struct sockaddr_in6)) == 0)
+               ? 0
+               : -1;
+  }
+  if ((family == AF_INET) && (g_src4_set != 0)) {
+    return (bind(fd, (struct sockaddr *)&g_src4,
+                 (socklen_t)sizeof(struct sockaddr_in)) == 0)
+               ? 0
+               : -1;
+  }
+  return 0;
 }
 
 bool IsPrivateAddress(const struct sockaddr *const addr) {
@@ -608,6 +731,10 @@ static int32_t ProbeIcmp(const struct sockaddr *addr, socklen_t addrlen,
     return PINGDD_SOCKET_FAILURE;
   }
   if (SetNonBlocking(fd) != 0) {
+    CloseSocket(fd);
+    return PINGDD_SOCKET_FAILURE;
+  }
+  if (BindSource(fd, family) != 0) {
     CloseSocket(fd);
     return PINGDD_SOCKET_FAILURE;
   }

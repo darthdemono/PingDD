@@ -40,21 +40,6 @@ static bool ParseLong(pcc_t const text, long *const out) {
   return true;
 }
 
-/** @brief Case-insensitive ASCII string equality. */
-static bool EqualsIgnoreCase(pcc_t a, pcc_t b) {
-  if ((a == NULL) || (b == NULL)) {
-    return false;
-  }
-  for (; (*a != '\0') && (*b != '\0'); a++, b++) {
-    int ca = tolower((unsigned char)*a);
-    int cb = tolower((unsigned char)*b);
-    if (ca != cb) {
-      return false;
-    }
-  }
-  return (*a == '\0') && (*b == '\0');
-}
-
 void PrintVersion(void) {
   char buf[128U] = {0};
   (void)snprintf(buf, sizeof(buf), "%s %s\n", NAME, PINGDD_VERSION_FULL);
@@ -65,8 +50,11 @@ void PrintVersion(void) {
 void PrintUsage(void) {
   FormattedPrint(
       PRINT_YELLOW,
-      "PingDD is a cross-platform TCP/UDP port reachability tool.\n"
-      "Syntax: pingdd [options] destination\n"
+      "PingDD is a cross-platform TCP/UDP/ICMP reachability & diagnostics "
+      "tool.\n"
+      "Syntax: pingdd [options] host [host ...]\n"
+      "Ports may be lists/ranges (-p 80,443,8000-8010); protocols a list "
+      "(-P TCP,UDP).\n"
       "\n"
       "Options:\n"
       "  -p, --port N       set port N (required for TCP/UDP)\n"
@@ -74,8 +62,12 @@ void PrintUsage(void) {
       "  -c, --count N      number of checks (default infinite)\n"
       "  -r, --rate N       delay between checks in ms (default 50)\n"
       "  -w, --deadline N   stop after N milliseconds total (default none)\n"
-      "  -P, --protocol P   probe protocol: TCP (default), UDP, or ICMP\n"
-      "                     (ICMP is classic ping and may need privilege)\n"
+      "  -P, --protocol P   protocol list: TCP (default), UDP, ICMP "
+      "(comma-separated)\n"
+      "  -I, --interface X  bind probes to a source IP or interface name\n"
+      "  --target SPEC      add a target host:port/proto (repeatable)\n"
+      "  --targets FILE     read targets from a file (one per line)\n"
+      "  --concurrent       probe all targets in parallel each cycle\n"
       "  -q, --quiet        suppress per-probe output, show summary only\n"
       "  -a, --audible      ring the terminal bell on each success\n"
       "  --json             emit machine-readable JSON (implies --no-color)\n"
@@ -133,6 +125,13 @@ int32_t ProcessArguments(int32_t const argc, char *const *const argv,
   arguments->AllowPublic = false;
   arguments->Concurrency = 10U;
   arguments->DurationMs = 0U;
+  arguments->HostCount = 0U;
+  arguments->PortSpec = NULL;
+  arguments->ProtoSpec = NULL;
+  arguments->TargetSpecCount = 0U;
+  arguments->TargetsFile = NULL;
+  arguments->Interface = NULL;
+  arguments->Concurrent = false;
 
   /* Parse arguments */
   for (i = 1; i < argc; i++) {
@@ -152,18 +151,13 @@ int32_t ProcessArguments(int32_t const argc, char *const *const argv,
       PrintVersion();
       exit(0);
     }
-    /* Port */
+    /* Port(s): single, comma list, or range — validated during target build. */
     else if ((strcmp(arg, "-p") == 0) || (strcmp(arg, "--port") == 0)) {
-      long value = 0;
       if ((i + 1) >= argc) {
-        PrintError("Error: -p/--port requires port number");
+        PrintError("Error: -p/--port requires a port, list, or range");
         return PINGDD_INVALID_ARGS;
       }
-      if (!ParseLong(argv[++i], &value) || (value < 1) || (value > 65535)) {
-        PrintError("Error: -p/--port must be an integer in 1..65535");
-        return PINGDD_INVALID_ARGS;
-      }
-      arguments->Port = (uint16_t)value;
+      arguments->PortSpec = argv[++i];
     }
     /* Timeout */
     else if ((strcmp(arg, "-t") == 0) || (strcmp(arg, "--timeout") == 0)) {
@@ -204,24 +198,45 @@ int32_t ProcessArguments(int32_t const argc, char *const *const argv,
       }
       arguments->Deadline = (uint32_t)value;
     }
-    /* Protocol selection (mutually exclusive) */
+    /* Protocol(s): one or a comma list; validated during target build. */
     else if ((strcmp(arg, "-P") == 0) || (strcmp(arg, "--protocol") == 0)) {
-      pcc_t value = NULL;
       if ((i + 1) >= argc) {
         PrintError("Error: -P/--protocol requires a value (TCP, UDP, or ICMP)");
         return PINGDD_INVALID_ARGS;
       }
-      value = argv[++i];
-      if (EqualsIgnoreCase(value, "TCP")) {
-        arguments->Type = IPPROTO_TCP;
-      } else if (EqualsIgnoreCase(value, "UDP")) {
-        arguments->Type = IPPROTO_UDP;
-      } else if (EqualsIgnoreCase(value, "ICMP")) {
-        arguments->Type = IPPROTO_ICMP;
-      } else {
-        PrintError("Error: -P/--protocol must be one of TCP, UDP, or ICMP");
+      arguments->ProtoSpec = argv[++i];
+    }
+    /* Repeated explicit target spec: host:port/proto */
+    else if (strcmp(arg, "--target") == 0) {
+      if ((i + 1) >= argc) {
+        PrintError("Error: --target requires a spec (host:port/proto)");
         return PINGDD_INVALID_ARGS;
       }
+      if (arguments->TargetSpecCount >= MAX_TARGET_SPECS) {
+        PrintError("Error: too many --target specs");
+        return PINGDD_INVALID_ARGS;
+      }
+      arguments->TargetSpecs[arguments->TargetSpecCount++] = argv[++i];
+    }
+    /* Targets file (one per line). */
+    else if (strcmp(arg, "--targets") == 0) {
+      if ((i + 1) >= argc) {
+        PrintError("Error: --targets requires a file path");
+        return PINGDD_INVALID_ARGS;
+      }
+      arguments->TargetsFile = argv[++i];
+    }
+    /* Source interface (IP or name). */
+    else if ((strcmp(arg, "-I") == 0) || (strcmp(arg, "--interface") == 0)) {
+      if ((i + 1) >= argc) {
+        PrintError("Error: -I/--interface requires an IP or interface name");
+        return PINGDD_INVALID_ARGS;
+      }
+      arguments->Interface = argv[++i];
+    }
+    /* Concurrent scheduling across targets. */
+    else if (strcmp(arg, "--concurrent") == 0) {
+      arguments->Concurrent = true;
     }
     /* Quiet */
     else if ((strcmp(arg, "-q") == 0) || (strcmp(arg, "--quiet") == 0)) {
@@ -315,27 +330,23 @@ int32_t ProcessArguments(int32_t const argc, char *const *const argv,
       PrintUsage();
       return PINGDD_INVALID_ARGS;
     }
-    /* Destination (the single non-option argument). */
-    else if (arguments->Destination == NULL) {
-      arguments->Destination = arg;
+    /* Positional host (one or more). */
+    else if (arguments->HostCount < MAX_HOSTS) {
+      if (arguments->Destination == NULL) {
+        arguments->Destination = arg; /* first host, for CSV naming etc. */
+      }
+      arguments->Hosts[arguments->HostCount++] = arg;
     } else {
-      char msg[160U] = {0};
-      (void)snprintf(msg, sizeof(msg),
-                     "Error: multiple destinations ('%s' and '%s')",
-                     arguments->Destination, arg);
-      PrintError(msg);
+      PrintError("Error: too many hosts");
       return PINGDD_INVALID_ARGS;
     }
   }
 
-  /* Validate required arguments. ICMP needs no port; TCP/UDP do. */
-  if (arguments->Destination == NULL) {
-    PrintError("Error: Missing destination");
-    PrintUsage();
-    return PINGDD_INVALID_ARGS;
-  }
-  if ((arguments->Type != IPPROTO_ICMP) && (arguments->Port == 0U)) {
-    PrintError("Error: Missing required port (-p) for TCP/UDP");
+  /* A destination is required in some form. Port/protocol validity and the
+   * "TCP/UDP need a port" rule are enforced per target in Targets_Build. */
+  if ((arguments->HostCount == 0U) && (arguments->TargetSpecCount == 0U) &&
+      (arguments->TargetsFile == NULL)) {
+    PrintError("Error: Missing destination (host, --target, or --targets)");
     PrintUsage();
     return PINGDD_INVALID_ARGS;
   }

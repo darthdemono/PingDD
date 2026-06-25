@@ -33,6 +33,8 @@ PingDD is built to solve these issues: simple feedback with clean output, and an
 - ICMP echo mode (classic ping) over IPv4 and IPv6.
 - Measures connect time (RTT) in milliseconds (microsecond level precision).
 - IPv4 and IPv6 support (automatic resolution of A/AAAA records).
+- Multi-target monitoring: many hosts x ports (lists/ranges) x protocols, sequential or concurrent.
+- Source-interface selection (bind probes to a NIC/IP) to compare wifi vs ethernet vs VPN paths.
 - Summary statistics including min/max/average, standard deviation, and p50/p95/p99 percentiles.
 - Network-quality diagnostics: outage/downtime detection, packet loss, jitter, latency spikes, bufferbloat estimate, DNS timing, and a noise-vs-issue verdict (HEALTHY / DEGRADED / DOWN).
 - Cross-platform behavior (Windows + Linux).
@@ -84,19 +86,23 @@ Then add the binary to your `PATH`:
 
 ```bash
 
-pingdd <destination> -p <port> [options]
+pingdd <host> [host ...] -p <port[,list,a-b]> [options]
 
 ```
 
 | Option            | Description                                   | Required | Default        |
 | :---------------- | :-------------------------------------------- | :------- | :------------- |
-| `<destination>`   | Target hostname or IP address (IPv4/IPv6)     | Yes      | -              |
-| `-p, --port N`    | Set port N                                    | Yes      | -              |
+| `<host> ...`      | One or more target hostnames/IPs (IPv4/IPv6)  | Yes*     | -              |
+| `-p, --port P`    | Port, list, or range (e.g. `80,443,8000-8010`)| TCP/UDP  | -              |
+| `-P, --protocol P`| Protocol list: `TCP`,`UDP`,`ICMP` (comma-sep) | No       | `TCP`          |
+| `-I, --interface X`| Bind probes to a source IP or interface name | No       | default route  |
+| `--target SPEC`   | Add a target `host:port/proto` (repeatable)   | No       | -              |
+| `--targets FILE`  | Read targets from a file (one per line)       | No       | -              |
+| `--concurrent`    | Probe all targets in parallel each cycle      | No       | sequential     |
 | `-t, --timeout N` | Per-probe timeout in milliseconds             | No       | `1000`         |
 | `-c, --count N`   | Number of checks                              | No       | infinite       |
 | `-r, --rate N`    | Rate: 1 check per N ms (delay between checks) | No       | `50ms`         |
 | `-w, --deadline N`| Stop after N milliseconds total               | No       | none           |
-| `-P, --protocol P`| Probe protocol: `TCP`, `UDP`, or `ICMP`       | No       | `TCP`          |
 | `-q, --quiet`     | Suppress per-probe lines, summary only        | No       | Disabled       |
 | `-a, --audible`   | Ring the terminal bell on each success        | No       | Disabled       |
 | `--json`          | Emit machine-readable JSON (implies no color) | No       | Disabled       |
@@ -105,6 +111,12 @@ pingdd <destination> -p <port> [options]
 | `--no-color`      | Disable color output                          | No       | auto (TTY)     |
 | `-V, --version`   | Display version                               | No       | -              |
 | `-?, --help`      | Display help                                  | No       | -              |
+
+\* A destination is required, but it can come from positional hosts,
+`--target`, or `--targets` instead of a single host argument. Multiple hosts,
+a port list/range, and a protocol list expand into a target matrix
+(host x port x protocol); ICMP targets ignore the port. Each target gets its
+own statistics and diagnostics, with a combined roll-up at the end.
 
 Color is auto-detected: enabled on a terminal, disabled when piped or when the
 [`NO_COLOR`](https://no-color.org/) environment variable is set.
@@ -167,6 +179,26 @@ Enable CSV logging:
 
 ```bash
 pingdd example.com -p 443 --csv
+```
+
+Probe several hosts across a port range and two protocols at once:
+
+```bash
+pingdd 1.1.1.1 8.8.8.8 -p 53,443,8000-8005 -P TCP,UDP
+```
+
+Compare the same target over wifi vs ethernet (bind the source interface):
+
+```bash
+pingdd 1.1.1.1 -p 443 -I wlan0
+pingdd 1.1.1.1 -p 443 -I eth0
+```
+
+Probe explicit targets concurrently, or from a file:
+
+```bash
+pingdd --target 1.1.1.1:443/tcp --target 8.8.8.8:53/udp --concurrent
+pingdd --targets hosts.txt --monitor
 ```
 
 
