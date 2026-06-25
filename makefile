@@ -68,7 +68,9 @@ RES     =
 
 ifeq ($(TARGET_OS), win32)
     CC      = i686-w64-mingw32-gcc
-    RC      = windres
+    # Prefer a plain 'windres' (MSYS2); fall back to the cross-prefixed name
+    # used by Fedora/Debian mingw packages.
+    RC      := $(shell command -v windres 2>/dev/null || command -v i686-w64-mingw32-windres 2>/dev/null || echo windres)
     CFLAGS  = $(CFLAGS_COMMON) $(CFLAGS_STATIC)
     LDFLAGS = -liphlpapi -lws2_32
     BINDIR  = bin/win-x86
@@ -79,7 +81,8 @@ ifeq ($(TARGET_OS), win32)
 
 else ifeq ($(TARGET_OS), winarm64)
     CC      = aarch64-w64-mingw32-gcc
-    RC      = llvm-windres
+    # llvm-mingw ships llvm-windres; some packagings use the prefixed name.
+    RC      := $(shell command -v llvm-windres 2>/dev/null || command -v aarch64-w64-mingw32-windres 2>/dev/null || echo llvm-windres)
     CFLAGS  = $(CFLAGS_COMMON) $(CFLAGS_STATIC)
     LDFLAGS = -liphlpapi -lws2_32
     BINDIR  = bin/win-arm64

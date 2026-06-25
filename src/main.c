@@ -7,6 +7,7 @@
  */
 
 #include "arguments.h"
+#include "cpool.h"
 #include "csv.h"
 #include "diag.h"
 #include "loadtest.h"
@@ -30,7 +31,6 @@
 #include <io.h>
 #include <windows.h>
 #else
-#include <pthread.h>
 #include <unistd.h>
 #endif
 
@@ -451,35 +451,6 @@ static int RunLoadTestMode(const arguments_t *const args, host_t *const host) {
   return EXIT_SUCCESS;
 }
 
-/** @brief Probe one target once, storing the outcome in its scratch fields. */
-static void ProbeOne(probe_target_t *t, uint32_t timeout) {
-  double rtt = 0.0;
-  char ip[64] = {0};
-  t->LastResult = Connect(&t->Resolved, timeout, &rtt, ip, sizeof(ip));
-  t->LastRtt = rtt;
-  (void)strncpy(t->LastIp, ip, sizeof(t->LastIp) - 1U);
-  t->LastIp[sizeof(t->LastIp) - 1U] = '\0';
-}
-
-typedef struct {
-  probe_target_t *T;
-  uint32_t Timeout;
-} cyc_arg_t;
-
-#ifdef _WIN32
-static DWORD WINAPI CycWorker(LPVOID p) {
-  cyc_arg_t *a = (cyc_arg_t *)p;
-  ProbeOne(a->T, a->Timeout);
-  return 0;
-}
-#else
-static void *CycWorker(void *p) {
-  cyc_arg_t *a = (cyc_arg_t *)p;
-  ProbeOne(a->T, a->Timeout);
-  return NULL;
-}
-#endif
-
 /** @brief Print the combined (all-targets) human roll-up. */
 static void PrintCombinedHuman(target_list_t *list) {
   char buf[160U] = {0};
@@ -564,12 +535,7 @@ static int ProbeLoop(const arguments_t *args, target_list_t *list,
   bool silent_diag = args->Quiet || args->Json || multi;
   pingdd_timer_t total = {0};
   probe_target_t **rt = NULL;
-  cyc_arg_t *cargs = NULL;
-#ifdef _WIN32
-  HANDLE *threads = NULL;
-#else
-  pthread_t *threads = NULL;
-#endif
+  cpool_t *pool = NULL;
   size_t rc = 0;
   size_t i = 0;
   unsigned long cycle = 0U;
@@ -587,19 +553,10 @@ static int ProbeLoop(const arguments_t *args, target_list_t *list,
     }
   }
 
+  /* Persistent worker pool: created once, reused for every cycle. */
   if (args->Concurrent && (rc > 0U)) {
-    cargs = (cyc_arg_t *)calloc(rc, sizeof(*cargs));
-#ifdef _WIN32
-    threads = (HANDLE *)calloc(rc, sizeof(HANDLE));
-#else
-    threads = (pthread_t *)calloc(rc, sizeof(pthread_t));
-#endif
-    if ((cargs == NULL) || (threads == NULL)) {
-      free(rt);
-      free(cargs);
-      free(threads);
-      return EXIT_FAILURE;
-    }
+    pool = Cpool_Create(rt, rc, args->Timeout);
+    /* If the pool can't start, fall back to sequential scheduling. */
   }
 
   /* Header */
@@ -664,40 +621,11 @@ static int ProbeLoop(const arguments_t *args, target_list_t *list,
       break;
     }
 
-    if (args->Concurrent && (rc > 0U)) {
-      size_t spawned = 0;
-      for (k = 0; k < rc; k++) {
-        cargs[k].T = rt[k];
-        cargs[k].Timeout = args->Timeout;
-#ifdef _WIN32
-        threads[k] = CreateThread(NULL, 0, CycWorker, &cargs[k], 0, NULL);
-        if (threads[k] == NULL) {
-          ProbeOne(rt[k], args->Timeout);
-        } else {
-          spawned++;
-        }
-#else
-        if (pthread_create(&threads[k], NULL, CycWorker, &cargs[k]) != 0) {
-          ProbeOne(rt[k], args->Timeout);
-        } else {
-          spawned++;
-        }
-#endif
-      }
-      (void)spawned;
-      for (k = 0; k < rc; k++) {
-#ifdef _WIN32
-        if (threads[k] != NULL) {
-          (void)WaitForSingleObject(threads[k], INFINITE);
-          (void)CloseHandle(threads[k]);
-        }
-#else
-        (void)pthread_join(threads[k], NULL);
-#endif
-      }
+    if (pool != NULL) {
+      Cpool_RunCycle(pool); /* all targets probed in parallel, blocks to done */
     } else {
       for (k = 0; k < rc; k++) {
-        ProbeOne(rt[k], args->Timeout);
+        Probe_One(rt[k], args->Timeout);
         if (g_interrupted != 0) {
           break;
         }
@@ -808,9 +736,8 @@ static int ProbeLoop(const arguments_t *args, target_list_t *list,
   }
   (void)fflush(stdout);
 
+  Cpool_Destroy(pool);
   free(rt);
-  free(cargs);
-  free(threads);
 
   /* Exit non-zero if every probe failed across all targets. */
   {

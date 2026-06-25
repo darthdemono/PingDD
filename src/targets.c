@@ -12,6 +12,33 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Portable reentrant tokenizer (C99-only; avoids depending on strtok_r being
+ * present, which is not guaranteed across every Windows toolchain). */
+static char *pd_strtok_r(char *str, const char *delim, char **saveptr) {
+  char *start = NULL;
+  char *end = NULL;
+
+  if (str == NULL) {
+    str = *saveptr;
+  }
+  if (str == NULL) {
+    return NULL;
+  }
+  start = str + strspn(str, delim);
+  if (*start == '\0') {
+    *saveptr = NULL;
+    return NULL;
+  }
+  end = start + strcspn(start, delim);
+  if (*end == '\0') {
+    *saveptr = NULL;
+  } else {
+    *end = '\0';
+    *saveptr = end + 1;
+  }
+  return start;
+}
+
 /* --------------------------------------------------------------------------
  * Small parsers
  * ------------------------------------------------------------------------ */
@@ -48,8 +75,8 @@ static int ParsePortList(const char *spec, uint16_t *out, size_t max,
   }
   (void)strncpy(buf, spec, sizeof(buf) - 1U);
 
-  for (tok = strtok_r(buf, ",", &save); tok != NULL;
-       tok = strtok_r(NULL, ",", &save)) {
+  for (tok = pd_strtok_r(buf, ",", &save); tok != NULL;
+       tok = pd_strtok_r(NULL, ",", &save)) {
     char *dash = strchr(tok, '-');
     long lo = 0;
     long hi = 0;
@@ -92,8 +119,8 @@ static int ParseProtoList(const char *spec, int32_t *out, size_t max,
   }
   (void)strncpy(buf, spec, sizeof(buf) - 1U);
 
-  for (tok = strtok_r(buf, ",", &save); tok != NULL;
-       tok = strtok_r(NULL, ",", &save)) {
+  for (tok = pd_strtok_r(buf, ",", &save); tok != NULL;
+       tok = pd_strtok_r(NULL, ",", &save)) {
     int32_t t = ProtoFromToken(tok);
     if (t < 0) {
       (void)snprintf(err, err_size, "invalid protocol '%s'", tok);
@@ -219,8 +246,8 @@ static int AddFileLine(target_list_t *list, char *line, char *err,
   int have_port = 0;
   int field = 0;
 
-  for (tok = strtok_r(line, " \t", &save); tok != NULL;
-       tok = strtok_r(NULL, " \t", &save)) {
+  for (tok = pd_strtok_r(line, " \t", &save); tok != NULL;
+       tok = pd_strtok_r(NULL, " \t", &save)) {
     if (field == 0) {
       (void)strncpy(host, tok, sizeof(host) - 1U);
     } else {

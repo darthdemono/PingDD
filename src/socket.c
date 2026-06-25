@@ -615,7 +615,13 @@ bool IsPrivateAddress(const struct sockaddr *const addr) {
   return false;
 }
 
-/** @brief Standard internet (one's complement) checksum over a byte buffer. */
+#ifndef _WIN32
+/**
+ * @brief Standard internet (one's complement) checksum over a byte buffer.
+ *
+ * Only the POSIX ICMP path builds packets by hand; the Windows path uses the
+ * IP Helper API, which computes the checksum itself.
+ */
 static uint16_t IcmpChecksum(const uint8_t *data, size_t len) {
   uint32_t sum = 0;
   size_t i = 0;
@@ -631,6 +637,7 @@ static uint16_t IcmpChecksum(const uint8_t *data, size_t len) {
   }
   return (uint16_t)(~sum);
 }
+#endif /* !_WIN32 */
 
 #ifdef _WIN32
 
