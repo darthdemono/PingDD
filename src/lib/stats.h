@@ -27,6 +27,9 @@ typedef struct {
   /** @brief Sum of observed connection times in seconds. */
   double Total;
 
+  /** @brief Sum of squares of observed connection times (for stddev). */
+  double TotalSq;
+
   /** @brief Minimum observed connection time in seconds. */
   double Minimum;
 
@@ -72,20 +75,11 @@ void Stats_UpdateMaxMin(stats_t *const stats, double const value);
 double Stats_Average(const stats_t *const stats);
 
 /**
- * @brief Format a statistics summary string.
+ * @brief Calculate the population standard deviation of connection times.
  *
- * Writes a single-line summary including attempted, connected, failed, and
- * failure percentage.
- *
- * @param[in]  stats    Statistics structure.
- * @param[out] str      Output buffer.
- * @param[in]  str_size Size of @p str in bytes.
- *
- * @return Number of characters written (or that would be written) as returned
- * by @c snprintf.
- * @note Returns 0 if any input is invalid.
+ * @param[in] stats Statistics structure.
+ * @return Standard deviation in seconds, or 0.0 if fewer than one sample.
  */
-int Stats_GetStatisticsString(const stats_t *const stats, char *const str,
-                              size_t const str_size);
+double Stats_StdDev(const stats_t *const stats);
 
 #endif /* STATS_H */

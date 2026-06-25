@@ -40,15 +40,6 @@ extern bool UseColor;
 void FormattedPrint(int32_t const color, pcc_t const data);
 
 /**
- * @brief Set the current terminal text color.
- *
- * If @ref UseColor is false, this function does nothing.
- *
- * @param[in] color Color selector (one of the PRINT_* macros).
- */
-void SetColor(int32_t const color);
-
-/**
  * @brief Reset the terminal text color to the default.
  *
  * If @ref UseColor is false, this function does nothing.

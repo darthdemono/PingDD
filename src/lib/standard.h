@@ -99,18 +99,20 @@ typedef struct {
   /** @brief Hostname string as provided/resolved. */
   char Hostname[256];
 
-  /** @brief IPv4 address as a 32-bit value (network order usage depends on
-   * implementation). */
-  uint32_t ipAddress;
+  /** @brief Resolved socket address (IPv4 or IPv6). */
+  struct sockaddr_storage SockAddr;
+
+  /** @brief Length of the valid data in @ref SockAddr. */
+  socklen_t SockAddrLen;
+
+  /** @brief Address family of the resolved address (AF_INET or AF_INET6). */
+  int32_t Family;
 
   /** @brief Target port number. */
   uint16_t Port;
 
   /** @brief Protocol identifier (e.g., IPPROTO_TCP). */
   int32_t Type;
-
-  /** @brief True if the destination was an IP address string. */
-  bool HostIsIP;
 } host_t;
 
 /** @brief Maximum hostname string length. */
@@ -145,6 +147,9 @@ typedef struct {
 
 /** @brief Connection refused / port closed. */
 #define PINGDD_SOCKET_CLOSED 104U
+
+/** @brief Destination host/network unreachable. */
+#define PINGDD_SOCKET_UNREACH 105U
 
 /** @brief Invalid arguments were provided to a function. */
 #define PINGDD_INVALID_ARGS 200U

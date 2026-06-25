@@ -7,25 +7,50 @@
 
 #include "csv.h"
 
+#include <ctype.h>
 #include <time.h>
+
+/**
+ * @brief Copy a destination into a filename-safe slug.
+ *
+ * Keeps alphanumerics, '.', '-' and '_'; replaces every other character
+ * (including '/', ':' from IPv6, and path separators) with '_'.
+ */
+static void SanitizeForFilename(pcc_t const src, char *const dst,
+                                size_t const dst_size) {
+  size_t i = 0;
+
+  if (dst_size == 0U) {
+    return;
+  }
+
+  for (i = 0; (src[i] != '\0') && (i < (dst_size - 1U)); i++) {
+    unsigned char c = (unsigned char)src[i];
+    if ((isalnum(c) != 0) || (c == '.') || (c == '-') || (c == '_')) {
+      dst[i] = (char)c;
+    } else {
+      dst[i] = '_';
+    }
+  }
+  dst[i] = '\0';
+}
 
 char *GenerateCSVFilename(const arguments_t *const args) {
   static char filename[256U] = {0};
+  char dest[128U] = {0};
   time_t now = time(NULL);
   struct tm *tm_info = localtime(&now);
 
   if ((args == NULL) || (args->Destination == NULL)) {
-    (void)snprintf(filename, sizeof(filename),
-                   "PingDD-unknown-%04d%02d%02d_%02d%02d%02d.csv",
-                   tm_info->tm_year + 1900, tm_info->tm_mon + 1,
-                   tm_info->tm_mday, tm_info->tm_hour, tm_info->tm_min,
-                   tm_info->tm_sec);
+    (void)strncpy(dest, "unknown", sizeof(dest) - 1U);
   } else {
-    (void)snprintf(
-        filename, sizeof(filename), "PingDD-%s-%04d%02d%02d_%02d%02d%02d.csv",
-        args->Destination, tm_info->tm_year + 1900, tm_info->tm_mon + 1,
-        tm_info->tm_mday, tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec);
+    SanitizeForFilename(args->Destination, dest, sizeof(dest));
   }
+
+  (void)snprintf(filename, sizeof(filename),
+                 "PingDD-%s-%04d%02d%02d_%02d%02d%02d.csv", dest,
+                 tm_info->tm_year + 1900, tm_info->tm_mon + 1, tm_info->tm_mday,
+                 tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec);
 
   return filename;
 }

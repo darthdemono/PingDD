@@ -37,12 +37,15 @@ jobs:
           echo "Changed files:"
           echo "$CHANGED_FILES"
 
-          if echo "$CHANGED_FILES" | grep -q '^src/'; then
+          # Only build-relevant files trigger a compile + release. Changes to
+          # README, docs, CI workflows, images, or LICENSE are skipped so the
+          # whole project is not rebuilt for non-source edits.
+          if echo "$CHANGED_FILES" | grep -qE '^(src/|makefile$|version\.rc$|GitVersion\.yml$)'; then
             echo "src_changed=true" >> $GITHUB_OUTPUT
-            echo "Source files changed - will create release"
+            echo "✅ Build-relevant files changed - will build/release"
           else
             echo "src_changed=false" >> $GITHUB_OUTPUT
-            echo "❌ No src/ changes - skipping release"
+            echo "❌ No build-relevant changes (docs/CI/etc) - skipping build"
           fi
 
   # Job 1: Windows x86
@@ -621,42 +624,44 @@ jobs:
             "centos-stream9"
           )
 
-          # -----------------------------
-          # Windows zips
-          # -----------------------------
-          zip -j "release-assets/pingdd-windows-x86.zip" \
-            "artifacts/pingdd-win32-${VERSION}-signed/pingdd.exe"
+          # Package one binary into a zip, renaming it inside the archive so
+          # every release zip contains a plain "pingdd" (or "pingdd.exe"),
+          # regardless of the per-distro/per-arch filename on disk.
+          # Usage: package <source-binary> <zip-name> <name-inside-zip>
+          package() {
+            local src="$1" zipname="$2" inner="$3" stage
+            stage="$(mktemp -d)"
+            cp "$src" "$stage/$inner"
+            chmod +x "$stage/$inner" || true
+            ( cd "$stage" && zip -q "$GITHUB_WORKSPACE/release-assets/$zipname" "$inner" )
+            rm -rf "$stage"
+          }
 
-          zip -j "release-assets/pingdd-windows-arm64.zip" \
-            "artifacts/pingdd-winarm64-${VERSION}-signed/pingdd.exe"
+          # -----------------------------
+          # Windows
+          # -----------------------------
+          package "artifacts/pingdd-win32-${VERSION}-signed/pingdd.exe" \
+                  "pingdd-windows-x86.zip" "pingdd.exe"
+          package "artifacts/pingdd-winarm64-${VERSION}-signed/pingdd.exe" \
+                  "pingdd-windows-arm64.zip" "pingdd.exe"
 
           # -----------------------------
-          # Linux x86 zips (already per-distro)
+          # Linux x86 (per-distro build; binary carries a distro suffix on disk)
           # -----------------------------
           for d in "${distros[@]}"; do
-            zip -j "release-assets/pingdd-${d}-x86.zip" \
-              "artifacts/pingdd-${d}-x86-${VERSION}/pingdd-"*
+            src=$(ls "artifacts/pingdd-${d}-x86-${VERSION}/pingdd-"* | head -n1)
+            package "$src" "pingdd-${d}-x86.zip" "pingdd"
           done
 
           # -----------------------------
-          # Linux arm64 + arm zips (single build duplicated per distro)
+          # Linux arm64 + arm (single cross build reused per distro)
           # -----------------------------
           ARM64_BIN="artifacts/pingdd-linux-arm64-${VERSION}/pingdd-arm64"
           ARM_BIN="artifacts/pingdd-linux-arm-${VERSION}/pingdd-arm"
 
-          chmod +x "$ARM64_BIN" "$ARM_BIN" || true
-
           for d in "${distros[@]}"; do
-            tmp64="release-assets/pingdd-${d}-arm64"
-            tmp32="release-assets/pingdd-${d}-arm"
-
-            cp "$ARM64_BIN" "$tmp64"
-            cp "$ARM_BIN"  "$tmp32"
-
-            zip -j "release-assets/pingdd-${d}-arm64.zip" "$tmp64"
-            zip -j "release-assets/pingdd-${d}-arm.zip"   "$tmp32"
-
-            rm -f "$tmp64" "$tmp32"
+            package "$ARM64_BIN" "pingdd-${d}-arm64.zip" "pingdd"
+            package "$ARM_BIN"   "pingdd-${d}-arm.zip"   "pingdd"
           done
 
           echo "=== Final release assets ==="

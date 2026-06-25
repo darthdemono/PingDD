@@ -3,6 +3,15 @@
 obj/
 bin/
 
+# Claude Code
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Local-only test harness
+tests/
+
 # Doxygen
 html/
 search/

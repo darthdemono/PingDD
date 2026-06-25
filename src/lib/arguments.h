@@ -49,12 +49,6 @@ typedef struct {
 } arguments_t;
 
 /**
- * @brief Print the program banner.
- * @details Prints the application name and version banner to the terminal.
- */
-void PrintBanner(void);
-
-/**
  * @brief Print usage/help text.
  * @details Prints the command syntax and available options.
  */

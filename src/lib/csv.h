@@ -11,7 +11,6 @@
 #include <stdio.h>
 
 #include "arguments.h"
-#include "host.h"
 #include "standard.h"
 
 /**

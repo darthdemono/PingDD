@@ -8,7 +8,6 @@
 
 #include "arguments.h"
 #include "csv.h"
-#include "i18n.h"
 #include "print.h"
 #include "socket.h"
 #include "standard.h"
@@ -63,6 +62,8 @@ static inline void GetTimestampString(char *const buf, const size_t buf_size) {
   extern long timezone;
   extern int daylight;
 
+  tzset(); /* ensure timezone/daylight globals are populated */
+
   long tz_seconds = timezone;
   if (daylight != 0) {
     tz_seconds -= 3600;
@@ -92,7 +93,12 @@ static inline void delay_ms(const uint32_t ms) {
 #ifdef _WIN32
   Sleep(ms);
 #else
-  sleep(ms / 1000U);
+  /* sleep() takes seconds; ms/1000 truncates sub-second rates to 0. Use
+   * nanosleep for true millisecond resolution. */
+  struct timespec ts;
+  ts.tv_sec = (time_t)(ms / 1000U);
+  ts.tv_nsec = (long)(ms % 1000U) * 1000000L;
+  (void)nanosleep(&ts, NULL);
 #endif
 }
 
@@ -263,18 +269,30 @@ int main(int argc, char *const *argv) {
     FormattedPrint(PRINT_YELLOW, "Approximate connection times:\n");
     ResetColor();
 
-    (void)printf("        Minimum = ");
-    (void)snprintf(buf, sizeof(buf), "%.4fms", stats.Minimum * 1000.0);
-    FormattedPrint(PRINT_BLUE, buf);
+    if (stats.Connects == 0U) {
+      /* No successful samples: Minimum/Maximum still hold sentinel values. */
+      (void)printf("        ");
+      FormattedPrint(PRINT_BLUE, "no successful connections");
+      (void)printf("\n");
+    } else {
+      (void)printf("        Minimum = ");
+      (void)snprintf(buf, sizeof(buf), "%.4fms", stats.Minimum * 1000.0);
+      FormattedPrint(PRINT_BLUE, buf);
 
-    (void)printf(" , Maximum = ");
-    (void)snprintf(buf, sizeof(buf), "%.4fms", stats.Maximum * 1000.0);
-    FormattedPrint(PRINT_BLUE, buf);
+      (void)printf(" , Maximum = ");
+      (void)snprintf(buf, sizeof(buf), "%.4fms", stats.Maximum * 1000.0);
+      FormattedPrint(PRINT_BLUE, buf);
 
-    (void)printf(" , Average = ");
-    (void)snprintf(buf, sizeof(buf), "%.5fms", Stats_Average(&stats) * 1000.0);
-    FormattedPrint(PRINT_BLUE, buf);
-    (void)printf("\n");
+      (void)printf(" , Average = ");
+      (void)snprintf(buf, sizeof(buf), "%.5fms",
+                     Stats_Average(&stats) * 1000.0);
+      FormattedPrint(PRINT_BLUE, buf);
+
+      (void)printf(" , StdDev = ");
+      (void)snprintf(buf, sizeof(buf), "%.5fms", Stats_StdDev(&stats) * 1000.0);
+      FormattedPrint(PRINT_BLUE, buf);
+      (void)printf("\n");
+    }
   }
 
   if ((args.CSVOutput != 0U) && (csv_file != NULL)) {
@@ -282,5 +300,11 @@ int main(int argc, char *const *argv) {
     csv_file = NULL;
   }
 
-  return 0;
+  /* Exit non-zero when attempts were made but none succeeded, so scripts and
+   * monitoring can detect an unreachable service (mirrors classic ping). */
+  if ((stats.Attempts > 0U) && (stats.Connects == 0U)) {
+    return EXIT_FAILURE;
+  }
+
+  return EXIT_SUCCESS;
 }

@@ -31,6 +31,8 @@ PingDD is built to solve these issues: simple feedback with clean output, and an
 
 - TCP port reachability check (connect-based).
 - Measures connect time (RTT) in milliseconds (microsecond level precision).
+- IPv4 and IPv6 support (automatic resolution of A/AAAA records).
+- Summary statistics including min/max/average and standard deviation (jitter).
 - Cross-platform behavior (Windows + Linux).
 - Colored terminal output (can be disabled).
 - Timestamp printed in output (useful for diagnostics).

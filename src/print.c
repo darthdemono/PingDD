@@ -48,19 +48,6 @@ void FormattedPrint(int32_t const color, pcc_t const data) {
   }
 }
 
-void SetColor(int32_t const color) {
-  const char *code = NULL;
-
-  if (!UseColor) {
-    return;
-  }
-
-  code = Print_GetAnsiCode(color);
-  if (code[0] != '\0') {
-    (void)printf("%s", code);
-  }
-}
-
 void ResetColor(void) {
   if (UseColor) {
     (void)printf("\x1b[0m");

@@ -6,14 +6,13 @@
  */
 
 #include "stats.h"
-#include "i18n.h"
 
 #include <float.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
-#define MICROSECONDS_PER_SECOND (1000000.0)
 #define DBL_MAX_VALUE (DBL_MAX)
 
 double Stats_Average(const stats_t *const stats) {
@@ -24,23 +23,23 @@ double Stats_Average(const stats_t *const stats) {
   return (stats->Total / (double)stats->Connects);
 }
 
-int Stats_GetStatisticsString(const stats_t *const stats, char *const str,
-                              size_t const str_size) {
-  double fail_percent = 0.0;
+double Stats_StdDev(const stats_t *const stats) {
+  double mean = 0.0;
+  double variance = 0.0;
 
-  if ((stats == NULL) || (str == NULL) || (str_size == 0U)) {
-    return 0;
+  if ((stats == NULL) || (stats->Connects == 0U)) {
+    return 0.0;
   }
 
-  if (stats->Attempts > 0U) {
-    fail_percent = ((double)stats->Failures / (double)stats->Attempts) * 100.0;
+  mean = stats->Total / (double)stats->Connects;
+  variance = (stats->TotalSq / (double)stats->Connects) - (mean * mean);
+
+  /* Guard against tiny negative values from floating-point rounding. */
+  if (variance < 0.0) {
+    variance = 0.0;
   }
 
-  return snprintf(str, str_size,
-                  "Attempted = %lu , Connected = %lu , Failed = %lu ( %.2f%% )",
-                  (unsigned long)stats->Attempts,
-                  (unsigned long)stats->Connects,
-                  (unsigned long)stats->Failures, fail_percent);
+  return sqrt(variance);
 }
 
 void Stats_UpdateMaxMin(stats_t *const stats, double const value) {
@@ -48,21 +47,16 @@ void Stats_UpdateMaxMin(stats_t *const stats, double const value) {
     return;
   }
 
-  if (stats->Attempts == 0U) {
+  if (value < stats->Minimum) {
     stats->Minimum = value;
-    stats->Maximum = value;
-    stats->Total = value;
-  } else {
-    if (value < stats->Minimum) {
-      stats->Minimum = value;
-    }
-
-    if (value > stats->Maximum) {
-      stats->Maximum = value;
-    }
-
-    stats->Total += value;
   }
+
+  if (value > stats->Maximum) {
+    stats->Maximum = value;
+  }
+
+  stats->Total += value;
+  stats->TotalSq += value * value;
 }
 
 void Stats_Reset(stats_t *const stats) {
@@ -74,6 +68,7 @@ void Stats_Reset(stats_t *const stats) {
   stats->Connects = 0U;
   stats->Failures = 0U;
   stats->Total = 0.0;
+  stats->TotalSq = 0.0;
   stats->Minimum = DBL_MAX_VALUE;
   stats->Maximum = 0.0;
 }

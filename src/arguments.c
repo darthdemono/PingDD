@@ -9,13 +9,34 @@
 #include "print.h"
 #include "version.h"
 
-void PrintBanner(void) {
-  char banner[512U] = {0};
+#include <errno.h>
+#include <limits.h>
 
-  (void)snprintf(banner, sizeof(banner), "%s v%s - Copyright (c) %s\n", NAME,
-                 PINGDD_VERSION_FULL, AUTHOR);
+/**
+ * @brief Parse a decimal string into a long, rejecting junk and overflow.
+ *
+ * @param[in]  text Numeric string to parse.
+ * @param[out] out  Receives the parsed value on success.
+ * @retval true  Parsed cleanly (whole string consumed, in long range).
+ * @retval false Empty, non-numeric, trailing garbage, or out of range.
+ */
+static bool ParseLong(pcc_t const text, long *const out) {
+  char *end = NULL;
+  long value = 0;
 
-  FormattedPrint(PRINT_BLUE, banner);
+  if ((text == NULL) || (text[0] == '\0')) {
+    return false;
+  }
+
+  errno = 0;
+  value = strtol(text, &end, 10);
+
+  if ((errno != 0) || (end == text) || (*end != '\0')) {
+    return false;
+  }
+
+  *out = value;
+  return true;
 }
 
 void PrintUsage(void) {
@@ -72,30 +93,42 @@ int32_t ProcessArguments(int32_t const argc, char *const *const argv,
     }
     /* Port */
     else if ((strcmp(arg, "-p") == 0) || (strcmp(arg, "--port") == 0)) {
-      if ((i + 1) < argc) {
-        arguments->Port = (uint16_t)atoi(argv[++i]);
-      } else {
+      long value = 0;
+      if ((i + 1) >= argc) {
         PrintError("Error: -p/--port requires port number");
         return PINGDD_INVALID_ARGS;
       }
+      if (!ParseLong(argv[++i], &value) || (value < 1) || (value > 65535)) {
+        PrintError("Error: -p/--port must be an integer in 1..65535");
+        return PINGDD_INVALID_ARGS;
+      }
+      arguments->Port = (uint16_t)value;
     }
     /* Timeout */
     else if ((strcmp(arg, "-t") == 0) || (strcmp(arg, "--timeout") == 0)) {
-      if ((i + 1) < argc) {
-        arguments->Timeout = (uint32_t)atoi(argv[++i]);
-      } else {
+      long value = 0;
+      if ((i + 1) >= argc) {
         PrintError("Error: -t/--timeout requires value");
         return PINGDD_INVALID_ARGS;
       }
+      if (!ParseLong(argv[++i], &value) || (value < 1) || (value > 3600000)) {
+        PrintError("Error: -t/--timeout must be an integer in 1..3600000 ms");
+        return PINGDD_INVALID_ARGS;
+      }
+      arguments->Timeout = (uint32_t)value;
     }
     /* Count */
     else if ((strcmp(arg, "-c") == 0) || (strcmp(arg, "--count") == 0)) {
-      if ((i + 1) < argc) {
-        arguments->Count = atoi(argv[++i]);
-      } else {
+      long value = 0;
+      if ((i + 1) >= argc) {
         PrintError("Error: -c/--count requires value");
         return PINGDD_INVALID_ARGS;
       }
+      if (!ParseLong(argv[++i], &value) || (value < -1) || (value > INT32_MAX)) {
+        PrintError("Error: -c/--count must be -1 (infinite) or >= 0");
+        return PINGDD_INVALID_ARGS;
+      }
+      arguments->Count = (int32_t)value;
     }
     /* No color */
     else if (strcmp(arg, "--no-color") == 0) {
@@ -107,11 +140,16 @@ int32_t ProcessArguments(int32_t const argc, char *const *const argv,
     }
     /* Rate */
     else if ((strcmp(arg, "-r") == 0) || (strcmp(arg, "--rate") == 0)) {
-      if (i + 1 >= argc) {
-        PrintError("Error: --rate requires value");
+      long value = 0;
+      if ((i + 1) >= argc) {
+        PrintError("Error: -r/--rate requires value");
         return PINGDD_INVALID_ARGS;
       }
-      arguments->Rate = (uint32_t)atoi(argv[++i]);
+      if (!ParseLong(argv[++i], &value) || (value < 0) || (value > 3600000)) {
+        PrintError("Error: -r/--rate must be an integer in 0..3600000 ms");
+        return PINGDD_INVALID_ARGS;
+      }
+      arguments->Rate = (uint32_t)value;
     }
     /* Destination (last non-option argument) */
     else {
