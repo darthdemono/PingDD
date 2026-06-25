@@ -35,6 +35,15 @@ typedef struct {
 
   /** @brief Maximum observed connection time in seconds. */
   double Maximum;
+
+  /** @brief Retained RTT samples (seconds) for percentile calculation. */
+  double *Samples;
+
+  /** @brief Number of valid entries in @ref Samples. */
+  size_t SampleCount;
+
+  /** @brief Allocated capacity of @ref Samples. */
+  size_t SampleCap;
 } stats_t;
 
 /**
@@ -54,14 +63,29 @@ void Stats_Init(stats_t *const stats);
 void Stats_Reset(stats_t *const stats);
 
 /**
- * @brief Update minimum, maximum, and total using a new sample value.
+ * @brief Record a new RTT sample: update min/max/total and retain the value
+ * for percentile calculation.
  *
  * @param[in,out] stats Statistics structure to update.
  * @param[in]     value New sample value in seconds.
- *
- * @note If this is the first sample, minimum and maximum are set to @p value.
  */
-void Stats_UpdateMaxMin(stats_t *const stats, double const value);
+void Stats_AddSample(stats_t *const stats, double const value);
+
+/**
+ * @brief Compute a percentile of the retained samples.
+ *
+ * @param[in] stats   Statistics structure.
+ * @param[in] percent Percentile in the range [0, 100].
+ * @return The percentile value in seconds, or 0.0 if no samples exist.
+ */
+double Stats_Percentile(const stats_t *const stats, double const percent);
+
+/**
+ * @brief Release any memory retained for percentile samples.
+ *
+ * @param[in,out] stats Statistics structure to clean up.
+ */
+void Stats_Free(stats_t *const stats);
 
 /**
  * @brief Calculate the average connection time.

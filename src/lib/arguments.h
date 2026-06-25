@@ -41,11 +41,47 @@ typedef struct {
   /** @brief Destination hostname or IP address string. */
   pcc_t Destination;
 
-  /** @brief Protocol type (typically TCP). */
+  /** @brief Protocol type (IPPROTO_TCP or IPPROTO_UDP). */
   int32_t Type;
 
   /** @brief Delay between attempts in milliseconds (rate control). */
   uint32_t Rate;
+
+  /** @brief Overall deadline in milliseconds (0 = no deadline). */
+  uint32_t Deadline;
+
+  /** @brief When true, suppress per-probe lines (summary only). */
+  bool Quiet;
+
+  /** @brief When true, emit a terminal bell on each successful probe. */
+  bool Audible;
+
+  /** @brief When true, emit machine-readable JSON instead of human text. */
+  bool Json;
+
+  /** @brief When true, force colored output even when not a TTY. */
+  bool ForceColor;
+
+  /** @brief Availability monitoring mode (continuous probe + alerts). */
+  bool Monitor;
+
+  /** @brief Authorized load-test mode (concurrent connection load). */
+  bool LoadTest;
+
+  /** @brief Resilience sweep mode (ramping concurrency). */
+  bool Resilience;
+
+  /** @brief Explicit authorization acknowledgement for load/resilience. */
+  bool Authorize;
+
+  /** @brief Permit load testing against non-private (public) targets. */
+  bool AllowPublic;
+
+  /** @brief Concurrent workers for load/resilience modes. */
+  uint32_t Concurrency;
+
+  /** @brief Load/resilience run duration in milliseconds. */
+  uint32_t DurationMs;
 } arguments_t;
 
 /**
@@ -53,6 +89,11 @@ typedef struct {
  * @details Prints the command syntax and available options.
  */
 void PrintUsage(void);
+
+/**
+ * @brief Print the program name and version.
+ */
+void PrintVersion(void);
 
 /**
  * @brief Parse command-line arguments into an @ref arguments_t struct.
@@ -113,6 +154,6 @@ int32_t WriteCSVHeader(FILE *file, const host_t *const host);
  * @retval -1 Error (invalid input).
  */
 int32_t WriteCSVRow(FILE *file, const host_t *const host, double rtt,
-                    const char *datetime);
+                    const char *datetime, const char *ip, const char *proto);
 
 #endif /* ARGUMENTS_H */

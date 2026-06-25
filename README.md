@@ -29,10 +29,12 @@ PingDD is built to solve these issues: simple feedback with clean output, and an
 
 ## Features
 
-- TCP port reachability check (connect-based).
+- TCP and UDP port reachability checks (connect/datagram based).
+- ICMP echo mode (classic ping) over IPv4 and IPv6.
 - Measures connect time (RTT) in milliseconds (microsecond level precision).
 - IPv4 and IPv6 support (automatic resolution of A/AAAA records).
-- Summary statistics including min/max/average and standard deviation (jitter).
+- Summary statistics including min/max/average, standard deviation, and p50/p95/p99 percentiles.
+- Network-quality diagnostics: outage/downtime detection, packet loss, jitter, latency spikes, bufferbloat estimate, DNS timing, and a noise-vs-issue verdict (HEALTHY / DEGRADED / DOWN).
 - Cross-platform behavior (Windows + Linux).
 - Colored terminal output (can be disabled).
 - Timestamp printed in output (useful for diagnostics).
@@ -88,15 +90,62 @@ pingdd <destination> -p <port> [options]
 
 | Option            | Description                                   | Required | Default        |
 | :---------------- | :-------------------------------------------- | :------- | :------------- |
-| `<destination>`   | Target hostname or IP address                 | Yes      | -              |
-| `-p, --port N`    | Set TCP port N                                | Yes      | -              |
-| `-t, --timeout N` | Timeout in milliseconds                       | No       | `1000`         |
+| `<destination>`   | Target hostname or IP address (IPv4/IPv6)     | Yes      | -              |
+| `-p, --port N`    | Set port N                                    | Yes      | -              |
+| `-t, --timeout N` | Per-probe timeout in milliseconds             | No       | `1000`         |
 | `-c, --count N`   | Number of checks                              | No       | infinite       |
 | `-r, --rate N`    | Rate: 1 check per N ms (delay between checks) | No       | `50ms`         |
-| `--no-color`      | Disable color output                          | No       | Colors enabled |
+| `-w, --deadline N`| Stop after N milliseconds total               | No       | none           |
+| `-P, --protocol P`| Probe protocol: `TCP`, `UDP`, or `ICMP`       | No       | `TCP`          |
+| `-q, --quiet`     | Suppress per-probe lines, summary only        | No       | Disabled       |
+| `-a, --audible`   | Ring the terminal bell on each success        | No       | Disabled       |
+| `--json`          | Emit machine-readable JSON (implies no color) | No       | Disabled       |
 | `--csv`           | Enable CSV logging                            | No       | Disabled       |
+| `--color`         | Force colored output                          | No       | auto (TTY)     |
+| `--no-color`      | Disable color output                          | No       | auto (TTY)     |
+| `-V, --version`   | Display version                               | No       | -              |
 | `-?, --help`      | Display help                                  | No       | -              |
 
+Color is auto-detected: enabled on a terminal, disabled when piped or when the
+[`NO_COLOR`](https://no-color.org/) environment variable is set.
+
+In `--protocol ICMP` mode no port is used, so `-p` is not required. ICMP may need
+elevated privileges (e.g. `CAP_NET_RAW`) on systems where unprivileged ICMP
+datagram sockets are not permitted.
+
+---
+
+## Monitoring & authorized testing
+
+PingDD includes three operator-focused modes for defensive use:
+
+| Mode            | Flag           | Purpose                                                        |
+| :-------------- | :------------- | :------------------------------------------------------------- |
+| Availability    | `--monitor`    | Continuous probing with outage alerts and an availability %.   |
+| Load test       | `--load-test`  | Sustained concurrent connections to measure behavior under load.|
+| Resilience      | `--resilience` | Ramps concurrency and reports where the service degrades.       |
+
+Load-test / resilience options: `--concurrency N` (1–256), `--duration N`
+(seconds, 1–3600).
+
+> **Authorized use only.** `--load-test` and `--resilience` generate real
+> connection load and therefore require `--authorize` to confirm you own or
+> have written permission to test the target. Public (non-private) targets are
+> refused unless you also pass `--allow-public`. Concurrency is capped at 256
+> and duration at one hour. PingDD has **no** packet-flooding, amplification,
+> reflection, spoofing, or filter-bypass capability — it is a measurement tool,
+> not an attack tool. You are responsible for using it lawfully.
+
+```bash
+# Watch a service and report availability:
+pingdd 192.168.1.10 -p 443 --monitor
+
+# Load test your own service (loopback / private), 50 conns for 30s:
+pingdd 127.0.0.1 -p 8080 --load-test --authorize --concurrency 50 --duration 30
+
+# Find the concurrency at which your service starts to degrade:
+pingdd 10.0.0.5 -p 80 --resilience --authorize --concurrency 128 --duration 60
+```
 
 ---
 

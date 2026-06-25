@@ -92,28 +92,44 @@ typedef char *pc_t;
  * @struct host_t
  * @brief Stores resolved host and connection settings.
  */
+/** @brief Maximum number of resolved addresses kept for fail-over. */
+#define MAX_RESOLVED_ADDRS 16U
+
 typedef struct {
-  /** @brief IPv4/IPv6 address string representation. */
+  /** @brief Primary IP address string (first resolved) for the header line. */
   char IPAddress[64];
 
   /** @brief Hostname string as provided/resolved. */
   char Hostname[256];
 
-  /** @brief Resolved socket address (IPv4 or IPv6). */
-  struct sockaddr_storage SockAddr;
+  /** @brief Reverse-DNS (PTR) name of the primary address, empty if none. */
+  char ReverseName[256];
 
-  /** @brief Length of the valid data in @ref SockAddr. */
-  socklen_t SockAddrLen;
+  /** @brief Resolved socket addresses (IPv4 and/or IPv6), in priority order. */
+  struct sockaddr_storage Addrs[MAX_RESOLVED_ADDRS];
 
-  /** @brief Address family of the resolved address (AF_INET or AF_INET6). */
-  int32_t Family;
+  /** @brief Length of each valid entry in @ref Addrs. */
+  socklen_t AddrLens[MAX_RESOLVED_ADDRS];
+
+  /** @brief Address family of each entry in @ref Addrs (AF_INET/AF_INET6). */
+  int32_t AddrFamilies[MAX_RESOLVED_ADDRS];
+
+  /** @brief Number of valid entries in @ref Addrs. */
+  size_t AddrCount;
 
   /** @brief Target port number. */
   uint16_t Port;
 
-  /** @brief Protocol identifier (e.g., IPPROTO_TCP). */
+  /** @brief Protocol identifier (IPPROTO_TCP or IPPROTO_UDP). */
   int32_t Type;
 } host_t;
+
+/**
+ * @brief Global interrupt flag, set by the SIGINT/SIGTERM handler.
+ *
+ * Defined in main.c. Exposed so blocking wait loops can abort cleanly.
+ */
+extern volatile sig_atomic_t g_interrupted;
 
 /** @brief Maximum hostname string length. */
 #define HOSTNAME_MAX_LEN 256U
@@ -150,6 +166,12 @@ typedef struct {
 
 /** @brief Destination host/network unreachable. */
 #define PINGDD_SOCKET_UNREACH 105U
+
+/** @brief UDP probe got no response (port open or filtered). */
+#define PINGDD_UDP_OPENFILTERED 106U
+
+/** @brief Operation aborted by user interrupt (SIGINT/SIGTERM). */
+#define PINGDD_INTERRUPTED 107U
 
 /** @brief Invalid arguments were provided to a function. */
 #define PINGDD_INVALID_ARGS 200U

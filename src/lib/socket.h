@@ -33,33 +33,69 @@ typedef int pingdd_socket_t;
 pcc_t GetFriendlyTypeName(int32_t const type);
 
 /**
- * @brief Attempt a connection to the host with a timeout.
+ * @brief Probe the host with a timeout, trying each resolved address in turn.
  *
- * @param[in]  host       Target host information (must contain an IPv4 address
- *                        string and port).
- * @param[in]  timeout_ms Timeout in milliseconds.
- * @param[out] rtt        Connection time in seconds.
+ * For TCP this is a connect() handshake; for UDP a datagram is sent and the
+ * socket is watched for a reply or an ICMP error. The first address that
+ * yields a definitive answer wins.
  *
- * @retval SUCCESS               Connection succeeded.
- * @retval PINGDD_SOCKET_TIMEOUT Connection attempt timed out.
- * @retval PINGDD_SOCKET_CLOSED  Connection was refused (closed port).
- * @retval PINGDD_SOCKET_FAILURE Socket operation failed.
- * @retval PINGDD_INVALID_ARGS   Invalid input arguments.
+ * @param[in]  host        Target host information (resolved addresses + port).
+ * @param[in]  timeout_ms  Timeout in milliseconds (per address).
+ * @param[out] rtt         Round-trip time in seconds.
+ * @param[out] out_ip      Buffer receiving the IP string actually probed.
+ * @param[in]  out_ip_size Size of @p out_ip in bytes.
+ *
+ * @retval SUCCESS                 Port reachable (TCP connected / UDP replied).
+ * @retval PINGDD_SOCKET_TIMEOUT   Attempt timed out.
+ * @retval PINGDD_SOCKET_CLOSED    Connection refused (closed port).
+ * @retval PINGDD_SOCKET_UNREACH   Destination unreachable.
+ * @retval PINGDD_UDP_OPENFILTERED UDP probe got no response.
+ * @retval PINGDD_SOCKET_FAILURE   Socket operation failed.
+ * @retval PINGDD_INTERRUPTED      Aborted by user interrupt.
+ * @retval PINGDD_INVALID_ARGS     Invalid input arguments.
  */
 int32_t Connect(const host_t *const host, uint32_t const timeout_ms,
-                double *const rtt);
+                double *const rtt, char *const out_ip, size_t const out_ip_size);
 
 /**
- * @brief Resolve a destination hostname to an IPv4 address.
+ * @brief Resolve a destination into one or more IPv4/IPv6 addresses.
  *
  * @param[in]  destination Hostname or IP address string.
- * @param[out] host        Output host structure to fill.
+ * @param[out] host        Output host structure to fill (Type must be set).
  *
  * @retval SUCCESS              Resolve succeeded.
  * @retval PINGDD_SOCKET_RESOLVE Resolve failed.
  * @retval PINGDD_INVALID_ARGS   Invalid input arguments.
  */
 int32_t Resolve(pcc_t const destination, host_t *const host);
+
+/**
+ * @brief Reverse-resolve an address to a hostname (PTR lookup).
+ *
+ * @param[in]  addr     Socket address to look up.
+ * @param[in]  addrlen  Length of @p addr.
+ * @param[out] out      Buffer receiving the hostname (empty on failure).
+ * @param[in]  out_size Size of @p out in bytes.
+ *
+ * @retval SUCCESS              A name was found.
+ * @retval PINGDD_SOCKET_RESOLVE No name (or lookup failed).
+ * @retval PINGDD_INVALID_ARGS   Invalid input arguments.
+ */
+int32_t ReverseResolve(const struct sockaddr *const addr,
+                       socklen_t const addrlen, char *const out,
+                       size_t const out_size);
+
+/**
+ * @brief Test whether an address is private/loopback/link-local.
+ *
+ * Used as a safety gate for load-test and resilience modes: public targets are
+ * refused unless explicitly authorized.
+ *
+ * @param[in] addr Socket address to classify.
+ * @retval true  Address is loopback, RFC1918/ULA, CGNAT, or link-local.
+ * @retval false Address is public (or unknown family).
+ */
+bool IsPrivateAddress(const struct sockaddr *const addr);
 
 /**
  * @brief Set the port and protocol type in a host structure.

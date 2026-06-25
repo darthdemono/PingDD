@@ -11,6 +11,20 @@
 
 bool UseColor = true;
 
+void Print_EnableVirtualTerminal(void) {
+#ifdef _WIN32
+#ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
+#define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x0004
+#endif
+  HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
+  DWORD mode = 0;
+
+  if ((handle != INVALID_HANDLE_VALUE) && (GetConsoleMode(handle, &mode) != 0)) {
+    (void)SetConsoleMode(handle, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+  }
+#endif
+}
+
 static const char *Print_GetAnsiCode(int32_t color) {
   switch (color) {
   case PRINT_BLUE:

@@ -70,7 +70,7 @@ ifeq ($(TARGET_OS), win32)
     CC      = i686-w64-mingw32-gcc
     RC      = windres
     CFLAGS  = $(CFLAGS_COMMON) $(CFLAGS_STATIC)
-    LDFLAGS = -lws2_32
+    LDFLAGS = -liphlpapi -lws2_32
     BINDIR  = bin/win-x86
     OBJDIR  = obj/win-x86
     EXEC    = $(BINDIR)/pingdd.exe
@@ -81,7 +81,7 @@ else ifeq ($(TARGET_OS), winarm64)
     CC      = aarch64-w64-mingw32-gcc
     RC      = llvm-windres
     CFLAGS  = $(CFLAGS_COMMON) $(CFLAGS_STATIC)
-    LDFLAGS = -lws2_32
+    LDFLAGS = -liphlpapi -lws2_32
     BINDIR  = bin/win-arm64
     OBJDIR  = obj/win-arm64
     EXEC    = $(BINDIR)/pingdd.exe
@@ -91,7 +91,7 @@ else ifeq ($(TARGET_OS), winarm64)
 else ifeq ($(TARGET_OS), linux)
     CC      = gcc
     CFLAGS  = $(CFLAGS_COMMON) -D_POSIX_C_SOURCE=200112L -D_GNU_SOURCE $(CFLAGS_STATIC)
-    LDFLAGS = -lm
+    LDFLAGS = -lm -lpthread
     BINDIR  = bin/linux
     OBJDIR  = obj/linux
     EXEC    = $(BINDIR)/pingdd$(EXEC_SUFFIX)
@@ -100,7 +100,7 @@ else ifeq ($(TARGET_OS), linuxarm)
     # Common cross compiler name for ARM 32-bit hard-float: arm-linux-gnueabihf-gcc. [web:384]
     CC      = arm-linux-gnueabihf-gcc
     CFLAGS  = $(CFLAGS_COMMON) -D_POSIX_C_SOURCE=200112L -D_GNU_SOURCE $(CFLAGS_STATIC)
-    LDFLAGS = -lm
+    LDFLAGS = -lm -lpthread
     BINDIR  = bin/linux-arm
     OBJDIR  = obj/linux-arm
     EXEC    = $(BINDIR)/pingdd$(EXEC_SUFFIX)
@@ -109,7 +109,7 @@ else ifeq ($(TARGET_OS), linuxarm64)
     # Common cross compiler name for ARM64: aarch64-linux-gnu-gcc. [web:384]
     CC      = aarch64-linux-gnu-gcc
     CFLAGS  = $(CFLAGS_COMMON) -D_POSIX_C_SOURCE=200112L -D_GNU_SOURCE $(CFLAGS_STATIC)
-    LDFLAGS = -lm
+    LDFLAGS = -lm -lpthread
     BINDIR  = bin/linux-arm64
     OBJDIR  = obj/linux-arm64
     EXEC    = $(BINDIR)/pingdd$(EXEC_SUFFIX)

@@ -18,6 +18,13 @@
  */
 extern bool UseColor;
 
+/**
+ * @brief Enable ANSI escape processing on the Windows console.
+ *
+ * No-op on POSIX, where ANSI sequences are handled natively.
+ */
+void Print_EnableVirtualTerminal(void);
+
 /* Color codes */
 #define PRINT_NONE 0
 #define PRINT_BLUE 1

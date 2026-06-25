@@ -67,14 +67,20 @@ int32_t WriteCSVHeader(FILE *file, const host_t *const host) {
 }
 
 int32_t WriteCSVRow(FILE *file, const host_t *const host, double rtt,
-                    const char *datetime) {
+                    const char *datetime, const char *ip, const char *proto) {
+  const char *ip_field = NULL;
+
   if ((file == NULL) || (host == NULL) || (datetime == NULL)) {
     return -1;
   }
 
-  (void)fprintf(file, "\"%s\",\"%s\",\"%s\",\"TCP\",%u,%.4f\n", datetime,
-                host->Hostname, host->IPAddress, (unsigned int)host->Port,
-                rtt * 1000.0);
+  /* Log the address actually probed (fail-over may pick a non-primary one);
+   * fall back to the primary if the caller did not provide it. */
+  ip_field = ((ip != NULL) && (ip[0] != '\0')) ? ip : host->IPAddress;
+
+  (void)fprintf(file, "\"%s\",\"%s\",\"%s\",\"%s\",%u,%.4f\n", datetime,
+                host->Hostname, ip_field, (proto != NULL) ? proto : "TCP",
+                (unsigned int)host->Port, rtt * 1000.0);
 
   (void)fflush(file);
 

@@ -45,6 +45,7 @@ int32_t WriteCSVHeader(FILE *const file, const host_t *const host);
  * @retval -1 Error (invalid input).
  */
 int32_t WriteCSVRow(FILE *const file, const host_t *const host,
-                    const double rtt, const char *datetime);
+                    const double rtt, const char *datetime, const char *ip,
+                    const char *proto);
 
 #endif /* PINGDD_CSV_H */
