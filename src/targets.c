@@ -43,7 +43,7 @@ static char *pd_strtok_r(char *str, const char *delim, char **saveptr) {
  * Small parsers
  * ------------------------------------------------------------------------ */
 
-/** @brief Map a protocol token (case-insensitive) to IPPROTO_*, or -1. */
+/** @brief Map a protocol token (case-insensitive) to IPPROTO_*, or -1.  */
 static int32_t ProtoFromToken(const char *tok) {
   size_t n = 0;
   char low[8] = {0};
