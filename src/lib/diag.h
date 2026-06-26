@@ -94,9 +94,11 @@ void Diag_PrintSummary(const diag_t *const diag, const stats_t *const stats);
 
 /**
  * @brief Print the final diagnostics as a JSON object (one line).
+ * @param[in,out] out   Destination stream (stdout or an open log file).
  * @param[in] diag  Diagnostic state.
  * @param[in] stats Aggregate statistics for the run.
  */
-void Diag_PrintJson(const diag_t *const diag, const stats_t *const stats);
+void Diag_PrintJson(FILE *const out, const diag_t *const diag,
+                    const stats_t *const stats);
 
 #endif /* PINGDD_DIAG_H */

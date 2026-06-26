@@ -268,28 +268,29 @@ void Diag_PrintSummary(const diag_t *const diag, const stats_t *const stats) {
   }
 }
 
-void Diag_PrintJson(const diag_t *const diag, const stats_t *const stats) {
+void Diag_PrintJson(FILE *const out, const diag_t *const diag,
+                    const stats_t *const stats) {
   double bloat_ms = 0.0;
 
-  if ((diag == NULL) || (stats == NULL)) {
+  if ((out == NULL) || (diag == NULL) || (stats == NULL)) {
     return;
   }
   bloat_ms = BufferbloatMs(stats);
 
-  (void)printf("{\"diagnostics\":{");
-  (void)printf("\"dns_ms\":%.3f,\"dns_ok\":%s,", diag->DnsMs,
-               diag->DnsFailed ? "false" : "true");
-  (void)printf("\"quality\":\"%s\",", QualityName(QualityGrade(stats)));
-  (void)printf("\"loss_pct\":%.2f,", LossPercent(stats));
-  (void)printf("\"jitter_ms\":%.4f,", Stats_StdDev(stats) * 1000.0);
+  (void)fprintf(out, "{\"diagnostics\":{");
+  (void)fprintf(out, "\"dns_ms\":%.3f,\"dns_ok\":%s,", diag->DnsMs,
+                diag->DnsFailed ? "false" : "true");
+  (void)fprintf(out, "\"quality\":\"%s\",", QualityName(QualityGrade(stats)));
+  (void)fprintf(out, "\"loss_pct\":%.2f,", LossPercent(stats));
+  (void)fprintf(out, "\"jitter_ms\":%.4f,", Stats_StdDev(stats) * 1000.0);
   if (bloat_ms < 0.0) {
-    (void)printf("\"bufferbloat\":\"n/a\",\"bufferbloat_ms\":null,");
+    (void)fprintf(out, "\"bufferbloat\":\"n/a\",\"bufferbloat_ms\":null,");
   } else {
-    (void)printf("\"bufferbloat\":\"%s\",\"bufferbloat_ms\":%.1f,",
-                 BloatName(bloat_ms), bloat_ms);
+    (void)fprintf(out, "\"bufferbloat\":\"%s\",\"bufferbloat_ms\":%.1f,",
+                  BloatName(bloat_ms), bloat_ms);
   }
-  (void)printf("\"outages\":%lu,\"longest_fail_streak\":%lu,\"down\":%s,",
-               diag->Outages, diag->LongestFailStreak,
-               diag->IsDown ? "true" : "false");
-  (void)printf("\"verdict\":\"%s\"}}\n", Verdict(diag, stats));
+  (void)fprintf(out, "\"outages\":%lu,\"longest_fail_streak\":%lu,\"down\":%s,",
+                diag->Outages, diag->LongestFailStreak,
+                diag->IsDown ? "true" : "false");
+  (void)fprintf(out, "\"verdict\":\"%s\"}}\n", Verdict(diag, stats));
 }

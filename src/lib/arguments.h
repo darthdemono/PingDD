@@ -65,6 +65,9 @@ typedef struct {
   /** @brief When true, emit machine-readable JSON instead of human text. */
   bool Json;
 
+  /** @brief When true, log NDJSON to an auto-named file (like CSV). */
+  bool JsonFile;
+
   /** @brief When true, force colored output even when not a TTY. */
   bool ForceColor;
 
@@ -76,12 +79,6 @@ typedef struct {
 
   /** @brief Resilience sweep mode (ramping concurrency). */
   bool Resilience;
-
-  /** @brief Explicit authorization acknowledgement for load/resilience. */
-  bool Authorize;
-
-  /** @brief Permit load testing against non-private (public) targets. */
-  bool AllowPublic;
 
   /** @brief Concurrent workers for load/resilience modes. */
   uint32_t Concurrency;

@@ -35,7 +35,12 @@ static void SanitizeForFilename(pcc_t const src, char *const dst,
   dst[i] = '\0';
 }
 
-char *GenerateCSVFilename(const arguments_t *const args) {
+/**
+ * @brief Build a timestamped "PingDD-<dest>-<stamp>.<ext>" log filename.
+ *
+ * Shared by the CSV and JSON filename generators.
+ */
+static char *BuildLogFilename(const arguments_t *const args, pcc_t const ext) {
   static char filename[256U] = {0};
   char dest[128U] = {0};
   time_t now = time(NULL);
@@ -48,11 +53,19 @@ char *GenerateCSVFilename(const arguments_t *const args) {
   }
 
   (void)snprintf(filename, sizeof(filename),
-                 "PingDD-%s-%04d%02d%02d_%02d%02d%02d.csv", dest,
+                 "PingDD-%s-%04d%02d%02d_%02d%02d%02d.%s", dest,
                  tm_info->tm_year + 1900, tm_info->tm_mon + 1, tm_info->tm_mday,
-                 tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec);
+                 tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec, ext);
 
   return filename;
+}
+
+char *GenerateCSVFilename(const arguments_t *const args) {
+  return BuildLogFilename(args, "csv");
+}
+
+char *GenerateJsonFilename(const arguments_t *const args) {
+  return BuildLogFilename(args, "json");
 }
 
 int32_t WriteCSVHeader(FILE *file, const host_t *const host) {

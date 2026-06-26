@@ -1,13 +1,12 @@
 /**
  * @file loadtest.h
- * @brief Authorized load testing and DDoS-resilience measurement.
+ * @brief Load testing and resilience measurement.
  *
- * These modes generate concurrent connection load against a target you are
- * authorized to test (your own infrastructure) and measure how latency, loss,
- * and throughput behave under that load. They are bounded by a hard
- * concurrency cap and a maximum duration, and the CLI refuses public targets
- * unless explicitly authorized. This is a measurement tool, not an attack
- * tool: there are no amplification, reflection, spoofing, or bypass features.
+ * These modes generate concurrent connection load against a target and measure
+ * how latency, loss, and throughput behave under that load. They are bounded by
+ * a hard concurrency cap and a maximum duration. This is a measurement tool,
+ * not an attack tool: there are no amplification, reflection, spoofing, or
+ * bypass features.
  */
 #ifndef PINGDD_LOADTEST_H
 #define PINGDD_LOADTEST_H

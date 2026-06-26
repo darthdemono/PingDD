@@ -4,7 +4,7 @@
 
 # PingDD
 
-PingDD is a cross-platform TCP, UDP, and ICMP reachability tool written in C. You give it a host and a port; it tells you whether that port is open, how fast the handshake completes, and, if you ask, keeps a CSV record of every attempt so you can compare runs later.
+PingDD is a cross-platform network reachability and diagnostics tool written in C that measures TCP/UDP/ICMP reachability. Where classic ping only answers "is the host up over ICMP," PingDD checks whether the service port is actually open over TCP, UDP, or ICMP, measures handshake latency to microsecond precision, and falls through IPv4/IPv6 addresses automatically. It probes many hosts, ports, protocols at once (sequentially or concurrently), reports min/max/avg, stddev and p50/p95/p99 percentiles, and runs live network-quality diagnostics: downtime, packet loss, jitter, latency spikes, bufferbloat, DNS timing distilled to a one-word HEALTHY/DEGRADED/DOWN verdict. Operator modes add continuous availability monitoring, load testing, and a resilience sweep. Output is human-colored, NDJSON, or CSV for keeping evidence across runs.
 
 It began as a TCP "ping," which is where the name comes from. It now does considerably more than ping.
 
@@ -20,9 +20,10 @@ Classic `ping` answers exactly one question: can I reach this host over ICMP? In
 
 - Is the service port open at all: 80, 443, 22, 3389, whatever you care about?
 - Is the path slow because of latency, filtering, or a sluggish handshake?
+- Is the quality bad: jitter, loss, spikes, bufferbloat, slow DNS?
 - Was the service down ten minutes ago, and can I prove it afterward?
 
-ICMP answers none of those. A host can happily reply to pings while the service behind it is dead, and plenty of hosts drop ICMP entirely while serving traffic just fine. So PingDD checks the thing you actually care about: the port. It measures how long the connection takes, and keeps the evidence.
+ICMP answers none of those. A host can happily reply to pings while the service behind it is dead, and plenty of hosts drop ICMP entirely while serving traffic just fine. So PingDD checks the thing you actually care about: the port. It measures how long the connection takes, scores the quality of the path, watches over time, and keeps the evidence in JSON or CSV so you can prove what happened after the fact.
 
 ---
 
@@ -36,8 +37,8 @@ ICMP answers none of those. A host can happily reply to pings while the service 
 - Source-interface selection: bind probes to a specific NIC or IP, so you can compare wifi against ethernet against a VPN on the same target.
 - Summary statistics: min/max/average, standard deviation, and p50/p95/p99 percentiles.
 - Network-quality diagnostics: downtime detection, packet loss, jitter, latency spikes, a bufferbloat estimate, DNS timing, and a one-word verdict of `HEALTHY`, `DEGRADED`, or `DOWN`.
-- Three operator modes: availability monitoring, authorized load testing, and a resilience sweep.
-- Machine-readable JSON output, or CSV logging for long runs.
+- Three operator modes: availability monitoring, load testing, and a resilience sweep.
+- Machine-readable JSON output to the terminal (`--json`), or logged to an auto-named file (`--json-file`) or CSV (`--csv`) for long runs.
 - Colored output that turns itself off when piped, and honors `NO_COLOR`.
 
 ---
@@ -125,7 +126,7 @@ The summary grades the link from loss, jitter, and latency, estimates bufferbloa
 
 ---
 
-## Monitoring & authorized testing
+## Monitoring & testing
 
 PingDD has three modes aimed at operators rather than one-off checks.
 
@@ -137,17 +138,17 @@ PingDD has three modes aimed at operators rather than one-off checks.
 
 Load-test and resilience take `--concurrency N` (1–256) and `--duration N` (seconds, 1–3600).
 
-A word on what PingDD is not. It is not a DoS tool, and it will not become one. There is no packet flooding, no amplification, no reflection, no spoofing, and no filter bypass. None of it, by design. Load testing exists to measure your own service under pressure, nothing else. Because it does generate real load, `--load-test` and `--resilience` refuse to run without `--authorize`, and they refuse a public target unless you also pass `--allow-public`. Concurrency is capped at 256 and duration at one hour. Use it on systems you own or have written permission to test. The rest is on you.
+A word on what PingDD is not. It is not a DoS tool, and it will not become one. There is no packet flooding, no amplification, no reflection, no spoofing, and no filter bypass. None of it, by design. Load testing exists to measure your own service under pressure, nothing else. Concurrency is capped at 256 and duration at one hour. Use it on systems you own or have written permission to test. The rest is on you.
 
 ```bash
 # Watch a service and report availability:
 pingdd 192.168.1.10 -p 443 --monitor
 
 # Load test your own service (loopback or private), 50 connections for 30s:
-pingdd 127.0.0.1 -p 8080 --load-test --authorize --concurrency 50 --duration 30
+pingdd 127.0.0.1 -p 8080 --load-test --concurrency 50 --duration 30
 
 # Find the concurrency at which your service starts to degrade:
-pingdd 10.0.0.5 -p 80 --resilience --authorize --concurrency 128 --duration 60
+pingdd 10.0.0.5 -p 80 --resilience --concurrency 128 --duration 60
 ```
 
 ---

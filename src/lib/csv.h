@@ -25,6 +25,17 @@
 char *GenerateCSVFilename(const arguments_t *const args);
 
 /**
+ * @brief Build a filename for a new JSON (NDJSON) log file.
+ *
+ * @param[in] args Parsed arguments (destination may be used in the filename).
+ * @return Pointer to an internal static buffer containing the filename.
+ *
+ * @warning The returned buffer is static and will be overwritten on the next
+ * call.
+ */
+char *GenerateJsonFilename(const arguments_t *const args);
+
+/**
  * @brief Write the CSV column header line.
  *
  * @param[in,out] file Open CSV file handle.

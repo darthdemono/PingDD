@@ -2,14 +2,14 @@
 
 IDI_MAIN_ICON ICON "pic/icon/PingDD Icon Small.ico"
 
-#define VER_FILEVERSION             1,0,0
-#define VER_FILEVERSION_STR         "1.0.0\0"
+#define VER_FILEVERSION             2,0,0
+#define VER_FILEVERSION_STR         "2.0.0\0"
 
-#define VER_PRODUCTVERSION          1,0,0
-#define VER_PRODUCTVERSION_STR      "1.0.0\0"
+#define VER_PRODUCTVERSION          2,0,0
+#define VER_PRODUCTVERSION_STR      "2.0.0\0"
 
 #define VER_COMPANYNAME_STR         "DarthDemono\0"
-#define VER_FILEDESCRIPTION_STR     "PingDD is a cross-platform ping tool for TCP port checking.\0"
+#define VER_FILEDESCRIPTION_STR     "PingDD is a cross-platform network reachability and diagnostics tool written in C that measures TCP/UDP/ICMP reachability.\0"
 #define VER_INTERNALNAME_STR        "PingDD\0"
 #define VER_LEGALCOPYRIGHT_STR      "Copyright (c) 2025 DarthDemono\0"
 #define VER_ORIGINALFILENAME_STR    "pingdd.exe\0"

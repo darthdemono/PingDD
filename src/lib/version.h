@@ -1,7 +1,7 @@
 #ifndef PINGDD_VERSION_H
 #define PINGDD_VERSION_H
 
-#define PINGDD_VERSION "1.1.0"
-#define PINGDD_VERSION_FULL "1.1.0"
+#define PINGDD_VERSION "2.0.0"
+#define PINGDD_VERSION_FULL "2.0.0"
 
 #endif /* PINGDD_VERSION_H */

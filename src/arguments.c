@@ -71,25 +71,22 @@ void PrintUsage(void) {
       "  -q, --quiet        suppress per-probe output, show summary only\n"
       "  -a, --audible      ring the terminal bell on each success\n"
       "  --json             emit machine-readable JSON (implies --no-color)\n"
+      "  --json-file        log NDJSON to an auto-named .json file\n"
       "  --csv              enable CSV logging\n"
       "  --color            force colored output\n"
       "  --no-color         disable color output\n"
       "  -V, --version      display version\n"
       "  -?, --help         display this help\n"
       "\n"
-      "Monitoring & authorized testing:\n"
+      "Monitoring & testing:\n"
       "  --monitor          continuous availability monitoring + alerts\n"
-      "  --load-test        sustained concurrent load (authorized targets "
-      "only)\n"
+      "  --load-test        sustained concurrent load\n"
       "  --resilience       ramp concurrency and report the degradation "
       "point\n"
       "  --concurrency N    concurrent workers for load/resilience (1..256, "
       "default 10)\n"
       "  --duration N       run duration in seconds for load/resilience "
-      "(1..3600)\n"
-      "  --authorize        confirm you are authorized to load-test the "
-      "target\n"
-      "  --allow-public     permit load testing a non-private target\n");
+      "(1..3600)\n");
 
   ResetColor();
 }
@@ -117,12 +114,11 @@ int32_t ProcessArguments(int32_t const argc, char *const *const argv,
   arguments->Quiet = false;
   arguments->Audible = false;
   arguments->Json = false;
+  arguments->JsonFile = false;
   arguments->ForceColor = false;
   arguments->Monitor = false;
   arguments->LoadTest = false;
   arguments->Resilience = false;
-  arguments->Authorize = false;
-  arguments->AllowPublic = false;
   arguments->Concurrency = 10U;
   arguments->DurationMs = 0U;
   arguments->HostCount = 0U;
@@ -251,6 +247,10 @@ int32_t ProcessArguments(int32_t const argc, char *const *const argv,
       arguments->Json = true;
       arguments->UseColor = false;
     }
+    /* JSON logging to a file */
+    else if (strcmp(arg, "--json-file") == 0) {
+      arguments->JsonFile = true;
+    }
     /* Force color */
     else if (strcmp(arg, "--color") == 0) {
       arguments->ForceColor = true;
@@ -266,14 +266,6 @@ int32_t ProcessArguments(int32_t const argc, char *const *const argv,
     /* Resilience sweep mode */
     else if (strcmp(arg, "--resilience") == 0) {
       arguments->Resilience = true;
-    }
-    /* Authorization acknowledgement */
-    else if (strcmp(arg, "--authorize") == 0) {
-      arguments->Authorize = true;
-    }
-    /* Allow public targets for load testing */
-    else if (strcmp(arg, "--allow-public") == 0) {
-      arguments->AllowPublic = true;
     }
     /* Concurrency */
     else if (strcmp(arg, "--concurrency") == 0) {

@@ -44,6 +44,9 @@ volatile sig_atomic_t g_interrupted = 0;
 /** @brief Global CSV output file handle. */
 static FILE *csv_file = NULL;
 
+/** @brief Global NDJSON log file handle (`--json-file`). */
+static FILE *json_file = NULL;
+
 /** @brief Return non-zero when standard output is an interactive terminal. */
 static int StdoutIsTty(void) {
 #ifdef _WIN32
@@ -232,27 +235,28 @@ static void PrintProbeHuman(int32_t result, unsigned long seq, pcc_t ip,
 }
 
 /** @brief Print one probe result as a compact JSON object. */
-static void PrintProbeJson(int32_t result, unsigned long seq, pcc_t ip,
-                           double rtt, pcc_t proto, bool show_port,
+static void PrintProbeJson(FILE *const out, int32_t result, unsigned long seq,
+                           pcc_t ip, double rtt, pcc_t proto, bool show_port,
                            uint16_t port, pcc_t datetime, pcc_t host) {
   char ip_esc[80U] = {0};
   char host_esc[280U] = {0};
   JsonEscape(ip, ip_esc, sizeof(ip_esc));
   JsonEscape(host, host_esc, sizeof(host_esc));
 
-  (void)printf("{\"seq\":%lu,\"timestamp\":\"%s\",\"host\":\"%s\",\"ip\":\"%s\","
-               "\"proto\":\"%s\",",
-               seq, datetime, host_esc, ip_esc, proto);
+  (void)fprintf(out,
+                "{\"seq\":%lu,\"timestamp\":\"%s\",\"host\":\"%s\",\"ip\":\"%s\","
+                "\"proto\":\"%s\",",
+                seq, datetime, host_esc, ip_esc, proto);
   if (show_port) {
-    (void)printf("\"port\":%u,", (unsigned)port);
+    (void)fprintf(out, "\"port\":%u,", (unsigned)port);
   } else {
-    (void)printf("\"port\":null,");
+    (void)fprintf(out, "\"port\":null,");
   }
-  (void)printf("\"status\":\"%s\",", StatusToken(result));
+  (void)fprintf(out, "\"status\":\"%s\",", StatusToken(result));
   if (result == SUCCESS) {
-    (void)printf("\"rtt_ms\":%.4f}\n", rtt * 1000.0);
+    (void)fprintf(out, "\"rtt_ms\":%.4f}\n", rtt * 1000.0);
   } else {
-    (void)printf("\"rtt_ms\":null}\n");
+    (void)fprintf(out, "\"rtt_ms\":null}\n");
   }
 }
 
@@ -314,7 +318,8 @@ static void PrintSummaryHuman(const stats_t *const stats) {
 }
 
 /** @brief Print the final statistics block as a JSON summary object. */
-static void PrintSummaryJson(const stats_t *const stats, pcc_t host) {
+static void PrintSummaryJson(FILE *const out, const stats_t *const stats,
+                             pcc_t host) {
   char host_esc[280U] = {0};
   double fail_percent = 0.0;
 
@@ -323,22 +328,23 @@ static void PrintSummaryJson(const stats_t *const stats, pcc_t host) {
   }
   JsonEscape(host, host_esc, sizeof(host_esc));
 
-  (void)printf("{\"summary\":{\"host\":\"%s\",\"sent\":%lu,\"received\":%lu,"
-               "\"lost\":%lu,\"loss_pct\":%.2f,",
-               host_esc, (unsigned long)stats->Attempts,
-               (unsigned long)stats->Connects, (unsigned long)stats->Failures,
-               fail_percent);
+  (void)fprintf(out,
+                "{\"summary\":{\"host\":\"%s\",\"sent\":%lu,\"received\":%lu,"
+                "\"lost\":%lu,\"loss_pct\":%.2f,",
+                host_esc, (unsigned long)stats->Attempts,
+                (unsigned long)stats->Connects, (unsigned long)stats->Failures,
+                fail_percent);
 
   if (stats->Connects == 0U) {
-    (void)printf("\"min_ms\":null,\"avg_ms\":null,\"max_ms\":null,"
-                 "\"mdev_ms\":null,\"p50_ms\":null,\"p95_ms\":null,"
-                 "\"p99_ms\":null}}\n");
+    (void)fprintf(out, "\"min_ms\":null,\"avg_ms\":null,\"max_ms\":null,"
+                       "\"mdev_ms\":null,\"p50_ms\":null,\"p95_ms\":null,"
+                       "\"p99_ms\":null}}\n");
     return;
   }
 
-  (void)printf(
-      "\"min_ms\":%.4f,\"avg_ms\":%.4f,\"max_ms\":%.4f,\"mdev_ms\":%.4f,"
-      "\"p50_ms\":%.4f,\"p95_ms\":%.4f,\"p99_ms\":%.4f}}\n",
+  (void)fprintf(
+      out, "\"min_ms\":%.4f,\"avg_ms\":%.4f,\"max_ms\":%.4f,\"mdev_ms\":%.4f,"
+           "\"p50_ms\":%.4f,\"p95_ms\":%.4f,\"p99_ms\":%.4f}}\n",
       stats->Minimum * 1000.0, Stats_Average(stats) * 1000.0,
       stats->Maximum * 1000.0, Stats_StdDev(stats) * 1000.0,
       Stats_Percentile(stats, 50.0) * 1000.0,
@@ -346,35 +352,33 @@ static void PrintSummaryJson(const stats_t *const stats, pcc_t host) {
       Stats_Percentile(stats, 99.0) * 1000.0);
 }
 
+/** @brief Print a target's header line as a JSON object. */
+static void PrintTargetJson(FILE *const out, const probe_target_t *const t) {
+  char he[280] = {0};
+  char ie[80] = {0};
+  JsonEscape(t->Host, he, sizeof(he));
+  JsonEscape(t->Resolved.IPAddress, ie, sizeof(ie));
+  (void)fprintf(out, "{\"target\":{\"host\":\"%s\",\"ip\":\"%s\",", he, ie);
+  if (t->Type == IPPROTO_ICMP) {
+    (void)fprintf(out, "\"port\":null,");
+  } else {
+    (void)fprintf(out, "\"port\":%u,", (unsigned)t->Port);
+  }
+  (void)fprintf(out, "\"proto\":\"%s\",\"resolved\":%s}}\n",
+                ProtoLabel(t->Type, t->Resolved.IPAddress),
+                t->ResolveOk ? "true" : "false");
+}
+
 /**
- * @brief Run an authorized load-test or resilience sweep, enforcing the
- * authorization and public-target guardrails first.
+ * @brief Run a load-test or resilience sweep.
  *
- * @return EXIT_SUCCESS on completion, EXIT_FAILURE if refused or it fails.
+ * @return EXIT_SUCCESS on completion, EXIT_FAILURE if it fails.
  */
 static int RunLoadTestMode(const arguments_t *const args, host_t *const host) {
   loadtest_cfg_t cfg;
   char line[256] = {0};
   pcc_t proto = ProtoLabel(host->Type, host->IPAddress);
   bool is_icmp = (host->Type == IPPROTO_ICMP);
-
-  /* Guardrail 1: explicit authorization acknowledgement. */
-  if (!args->Authorize) {
-    PrintError("Refusing: load/resilience testing requires --authorize. "
-               "Only run this against systems you own or have written "
-               "permission to test.");
-    return EXIT_FAILURE;
-  }
-  /* Guardrail 2: public targets require an extra explicit opt-in. */
-  if (!IsPrivateAddress((const struct sockaddr *)&host->Addrs[0]) &&
-      !args->AllowPublic) {
-    (void)snprintf(line, sizeof(line),
-                   "Refusing: %s is a public address. Add --allow-public "
-                   "only if you are authorized to test it.",
-                   host->IPAddress);
-    PrintError(line);
-    return EXIT_FAILURE;
-  }
 
   (void)snprintf(line, sizeof(line), "%s v%s\n", NAME, PINGDD_VERSION_FULL);
   FormattedPrint(PRINT_BLUE, line);
@@ -539,6 +543,17 @@ static int ProbeLoop(const arguments_t *args, target_list_t *list,
   size_t rc = 0;
   size_t i = 0;
   unsigned long cycle = 0U;
+  /* JSON sinks: stdout (--json) and/or the log file (--json-file). */
+  FILE *jsink[2];
+  size_t nsink = 0U;
+  size_t s = 0U;
+
+  if (args->Json) {
+    jsink[nsink++] = stdout;
+  }
+  if (args->JsonFile && (json_file != NULL)) {
+    jsink[nsink++] = json_file;
+  }
 
   rt = (probe_target_t **)calloc(list->Count, sizeof(*rt));
   if (rt == NULL) {
@@ -560,24 +575,14 @@ static int ProbeLoop(const arguments_t *args, target_list_t *list,
   }
 
   /* Header */
-  if (args->Json) {
+  if (nsink > 0U) {
     for (i = 0; i < list->Count; i++) {
-      probe_target_t *t = &list->Items[i];
-      char he[280] = {0};
-      char ie[80] = {0};
-      JsonEscape(t->Host, he, sizeof(he));
-      JsonEscape(t->Resolved.IPAddress, ie, sizeof(ie));
-      (void)printf("{\"target\":{\"host\":\"%s\",\"ip\":\"%s\",", he, ie);
-      if (t->Type == IPPROTO_ICMP) {
-        (void)printf("\"port\":null,");
-      } else {
-        (void)printf("\"port\":%u,", (unsigned)t->Port);
+      for (s = 0; s < nsink; s++) {
+        PrintTargetJson(jsink[s], &list->Items[i]);
       }
-      (void)printf("\"proto\":\"%s\",\"resolved\":%s}}\n",
-                   ProtoLabel(t->Type, t->Resolved.IPAddress),
-                   t->ResolveOk ? "true" : "false");
     }
-  } else {
+  }
+  if (!args->Json) {
     char line[420] = {0};
     (void)snprintf(line, sizeof(line), "%s v%s\n", NAME, PINGDD_VERSION_FULL);
     FormattedPrint(PRINT_BLUE, line);
@@ -664,14 +669,18 @@ static int ProbeLoop(const arguments_t *args, target_list_t *list,
       }
       t->Stats.Attempts++;
 
-      if (!args->Quiet) {
-        if (args->Json) {
-          PrintProbeJson(r, seq, t->LastIp, t->LastRtt, proto, show_port,
-                         t->Port, datetime, t->Host);
-        } else {
-          PrintProbeHuman(r, seq, t->LastIp, t->LastRtt, proto, show_port,
-                          t->Port, datetime, multi ? t->Label : NULL);
+      /* NDJSON: the file sink logs every probe (like CSV); the stdout sink
+       * still honors --quiet. */
+      for (s = 0; s < nsink; s++) {
+        if ((jsink[s] == stdout) && args->Quiet) {
+          continue;
         }
+        PrintProbeJson(jsink[s], r, seq, t->LastIp, t->LastRtt, proto, show_port,
+                       t->Port, datetime, t->Host);
+      }
+      if (!args->Quiet && !args->Json) {
+        PrintProbeHuman(r, seq, t->LastIp, t->LastRtt, proto, show_port,
+                        t->Port, datetime, multi ? t->Label : NULL);
       }
       Diag_Observe(&t->Diag, success, t->LastRtt);
     }
@@ -711,10 +720,11 @@ static int ProbeLoop(const arguments_t *args, target_list_t *list,
       }
       continue;
     }
-    if (args->Json) {
-      PrintSummaryJson(&t->Stats, t->Host);
-      Diag_PrintJson(&t->Diag, &t->Stats);
-    } else {
+    for (s = 0; s < nsink; s++) {
+      PrintSummaryJson(jsink[s], &t->Stats, t->Host);
+      Diag_PrintJson(jsink[s], &t->Diag, &t->Stats);
+    }
+    if (!args->Json) {
       PrintSummaryHuman(&t->Stats);
       Diag_PrintSummary(&t->Diag, &t->Stats);
       if (args->Monitor) {
@@ -843,11 +853,35 @@ int main(int argc, char *const *argv) {
     }
   }
 
+  /* JSON file setup (filename derived from the first destination). */
+  if (args.JsonFile) {
+    char *json_filename = GenerateJsonFilename(&args);
+    json_file = fopen(json_filename, "w");
+    if (json_file == NULL) {
+      PrintError("Failed to create JSON file");
+      if (csv_file != NULL) {
+        (void)fclose(csv_file);
+        csv_file = NULL;
+      }
+      Targets_Free(&targets);
+      return EXIT_FAILURE;
+    }
+    if (!args.Json) {
+      FormattedPrint(PRINT_YELLOW, "JSON logging: ");
+      FormattedPrint(PRINT_GREEN, json_filename);
+      FormattedPrint(PRINT_YELLOW, "\n");
+    }
+  }
+
   rc = ProbeLoop(&args, &targets, dns_ms);
 
   if ((args.CSVOutput != 0U) && (csv_file != NULL)) {
     (void)fclose(csv_file);
     csv_file = NULL;
+  }
+  if (args.JsonFile && (json_file != NULL)) {
+    (void)fclose(json_file);
+    json_file = NULL;
   }
   Targets_Free(&targets);
   return rc;
