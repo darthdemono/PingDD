@@ -47,6 +47,8 @@ typedef struct {
   double LastRtt;
   /** @brief Scratch: last probed IP string. */
   char LastIp[64];
+  /** @brief Scratch: TTL/hop-limit of the last reply (-1 if unavailable). */
+  int32_t LastTtl;
 } probe_target_t;
 
 /**

@@ -74,7 +74,8 @@ static void *WorkerMain(void *param)
   while ((NowMs() < w->DeadlineMs) && (g_interrupted == 0)) {
     double rtt = 0.0;
     char ip[64];
-    int32_t r = Connect(cfg->Host, cfg->TimeoutMs, &rtt, ip, sizeof(ip));
+    int32_t r =
+        Connect(cfg->Host, cfg->TimeoutMs, &rtt, ip, sizeof(ip), NULL);
 
     w->Res.Attempts++;
     if (r == SUCCESS) {

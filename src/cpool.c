@@ -57,8 +57,10 @@ static void cnd_broadcast(cnd_t *c) { (void)pthread_cond_broadcast(c); }
 void Probe_One(probe_target_t *t, uint32_t timeout) {
   double rtt = 0.0;
   char ip[64] = {0};
-  t->LastResult = Connect(&t->Resolved, timeout, &rtt, ip, sizeof(ip));
+  int32_t ttl = -1;
+  t->LastResult = Connect(&t->Resolved, timeout, &rtt, ip, sizeof(ip), &ttl);
   t->LastRtt = rtt;
+  t->LastTtl = ttl;
   (void)strncpy(t->LastIp, ip, sizeof(t->LastIp) - 1U);
   t->LastIp[sizeof(t->LastIp) - 1U] = '\0';
 }

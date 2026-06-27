@@ -1,6 +1,6 @@
 DOXYFILE_ENCODING      = UTF-8
 PROJECT_NAME           = "PingDD"
-PROJECT_NUMBER         = 1.1.0
+PROJECT_NUMBER         = 2.1.0
 PROJECT_BRIEF          = "PingDD is a cross-platform TCP “ping” tool written in C."
 PROJECT_LOGO           = "pic/icon/PingDD Icon Small.png"
 PROJECT_ICON           = "pic/icon/PingDD Icon Small.png"
@@ -163,9 +163,11 @@ HTML_FILE_EXTENSION    = .html
 HTML_HEADER            =
 HTML_FOOTER            =
 HTML_STYLESHEET        =
-HTML_EXTRA_STYLESHEET  =
+HTML_EXTRA_STYLESHEET  = third_party/doxygen-awesome-css/doxygen-awesome.css \
+                         third_party/doxygen-awesome-css/doxygen-awesome-sidebar-only.css \
+                         docs/doxygen-custom.css
 HTML_EXTRA_FILES       =
-HTML_COLORSTYLE        = AUTO_DARK
+HTML_COLORSTYLE        = LIGHT
 HTML_COLORSTYLE_HUE    = 220
 HTML_COLORSTYLE_SAT    = 100
 HTML_COLORSTYLE_GAMMA  = 80
@@ -202,7 +204,7 @@ ECLIPSE_DOC_ID         = org.pingdd.Project
 DISABLE_INDEX          = NO
 GENERATE_TREEVIEW      = YES
 PAGE_OUTLINE_PANEL     = YES
-FULL_SIDEBAR           = YES
+FULL_SIDEBAR           = NO
 ENUM_VALUES_PER_LINE   = 4
 SHOW_ENUM_VALUES       = YES
 TREEVIEW_WIDTH         = 340

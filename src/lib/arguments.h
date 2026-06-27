@@ -110,6 +110,29 @@ typedef struct {
 
   /** @brief Probe all targets concurrently each cycle when true. */
   bool Concurrent;
+
+  /** @brief Annotate resolved addresses with reverse DNS and ASN info. */
+  bool Resolve;
+
+  /** @brief IP ToS/DSCP byte to set on probe sockets (-1 = leave default). */
+  int32_t Tos;
+
+  /** @brief Emit a Prometheus/OpenMetrics exposition at the end of the run. */
+  bool Prometheus;
+
+  /** @brief Traceroute mode: discover the path to the (single) target. */
+  bool Traceroute;
+  /** @brief Maximum hops for traceroute mode. */
+  int32_t MaxHops;
+  /** @brief Probes per hop for traceroute mode. */
+  int32_t Queries;
+
+  /** @brief HTTP(S) probe URL (NULL = not in HTTP mode). */
+  pcc_t HttpUrl;
+  /** @brief HTTP request method (default "GET"). */
+  pcc_t HttpMethod;
+  /** @brief Expected HTTP status, or 0 to accept any 2xx/3xx. */
+  int32_t HttpStatus;
 } arguments_t;
 
 /**

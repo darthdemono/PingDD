@@ -10,13 +10,16 @@
 #include "cpool.h"
 #include "csv.h"
 #include "diag.h"
+#include "http.h"
 #include "loadtest.h"
 #include "print.h"
+#include "resolve.h"
 #include "socket.h"
 #include "standard.h"
 #include "stats.h"
 #include "targets.h"
 #include "timer.h"
+#include "traceroute.h"
 #include "version.h"
 
 #include <math.h>
@@ -67,6 +70,37 @@ static pcc_t ProtoLabel(int32_t const type, pcc_t const ip) {
     return ((ip != NULL) && (strchr(ip, ':') != NULL)) ? "ICMPv6" : "ICMP";
   }
   return (type == IPPROTO_UDP) ? "UDP" : "TCP";
+}
+
+/**
+ * @brief Format a reverse-DNS + ASN annotation for a resolved host.
+ *
+ * @return true when at least one annotation field was present.
+ */
+static bool FormatAnnotation(const host_t *const h, char *const out,
+                             size_t const out_size) {
+  bool has_rdns = (h->ReverseName[0] != '\0');
+  bool has_asn = (h->Asn[0] != '\0');
+
+  out[0] = '\0';
+  if (!has_rdns && !has_asn) {
+    return false;
+  }
+  if (has_rdns && has_asn) {
+    if (h->AsnOrg[0] != '\0') {
+      (void)snprintf(out, out_size, "%s [%s %s]", h->ReverseName, h->Asn,
+                     h->AsnOrg);
+    } else {
+      (void)snprintf(out, out_size, "%s [%s]", h->ReverseName, h->Asn);
+    }
+  } else if (has_rdns) {
+    (void)snprintf(out, out_size, "%s", h->ReverseName);
+  } else if (h->AsnOrg[0] != '\0') {
+    (void)snprintf(out, out_size, "[%s %s]", h->Asn, h->AsnOrg);
+  } else {
+    (void)snprintf(out, out_size, "[%s]", h->Asn);
+  }
+  return true;
 }
 
 /** @brief Short machine-readable status token for a probe result code. */
@@ -195,7 +229,8 @@ static void JsonEscape(pcc_t const src, char *const dst, size_t const dst_size) 
 /** @brief Print one human-readable probe result line. */
 static void PrintProbeHuman(int32_t result, unsigned long seq, pcc_t ip,
                             double rtt, pcc_t proto, bool show_port,
-                            uint16_t port, pcc_t datetime, pcc_t prefix) {
+                            uint16_t port, pcc_t datetime, pcc_t prefix,
+                            int32_t ttl) {
   char buf[96U] = {0};
 
   if (prefix != NULL) {
@@ -219,6 +254,11 @@ static void PrintProbeHuman(int32_t result, unsigned long seq, pcc_t ip,
       (void)snprintf(buf, sizeof(buf), "%u", (unsigned)port);
       FormattedPrint(PRINT_GREEN, buf);
     }
+    if (ttl >= 0) {
+      FormattedPrint(PRINT_WHITE, " ttl=");
+      (void)snprintf(buf, sizeof(buf), "%d", (int)ttl);
+      FormattedPrint(PRINT_GREEN, buf);
+    }
     FormattedPrint(PRINT_WHITE, " datetime=");
     FormattedPrint(PRINT_GREEN, datetime);
     (void)printf("\n");
@@ -237,7 +277,8 @@ static void PrintProbeHuman(int32_t result, unsigned long seq, pcc_t ip,
 /** @brief Print one probe result as a compact JSON object. */
 static void PrintProbeJson(FILE *const out, int32_t result, unsigned long seq,
                            pcc_t ip, double rtt, pcc_t proto, bool show_port,
-                           uint16_t port, pcc_t datetime, pcc_t host) {
+                           uint16_t port, pcc_t datetime, pcc_t host,
+                           int32_t ttl) {
   char ip_esc[80U] = {0};
   char host_esc[280U] = {0};
   JsonEscape(ip, ip_esc, sizeof(ip_esc));
@@ -253,6 +294,9 @@ static void PrintProbeJson(FILE *const out, int32_t result, unsigned long seq,
     (void)fprintf(out, "\"port\":null,");
   }
   (void)fprintf(out, "\"status\":\"%s\",", StatusToken(result));
+  if (ttl >= 0) {
+    (void)fprintf(out, "\"ttl\":%d,", (int)ttl);
+  }
   if (result == SUCCESS) {
     (void)fprintf(out, "\"rtt_ms\":%.4f}\n", rtt * 1000.0);
   } else {
@@ -364,9 +408,21 @@ static void PrintTargetJson(FILE *const out, const probe_target_t *const t) {
   } else {
     (void)fprintf(out, "\"port\":%u,", (unsigned)t->Port);
   }
-  (void)fprintf(out, "\"proto\":\"%s\",\"resolved\":%s}}\n",
+  (void)fprintf(out, "\"proto\":\"%s\",\"resolved\":%s",
                 ProtoLabel(t->Type, t->Resolved.IPAddress),
                 t->ResolveOk ? "true" : "false");
+  if (t->Resolved.ReverseName[0] != '\0') {
+    char re[520] = {0};
+    JsonEscape(t->Resolved.ReverseName, re, sizeof(re));
+    (void)fprintf(out, ",\"rdns\":\"%s\"", re);
+  }
+  if (t->Resolved.Asn[0] != '\0') {
+    char ae[260] = {0};
+    JsonEscape(t->Resolved.AsnOrg, ae, sizeof(ae));
+    (void)fprintf(out, ",\"asn\":\"%s\",\"asn_org\":\"%s\"", t->Resolved.Asn,
+                  ae);
+  }
+  (void)fprintf(out, "}}\n");
 }
 
 /**
@@ -455,6 +511,110 @@ static int RunLoadTestMode(const arguments_t *const args, host_t *const host) {
   return EXIT_SUCCESS;
 }
 
+/**
+ * @brief Run the HTTP(S) probe mode: repeatedly fetch a URL and report status.
+ *
+ * @return EXIT_SUCCESS if at least one probe met the success criterion.
+ */
+static int RunHttpMode(const arguments_t *const args) {
+  http_cfg_t cfg;
+  stats_t stats;
+  unsigned long cycle = 0;
+  unsigned long ok = 0;
+  char line[512] = {0};
+
+  (void)snprintf(cfg.Method, sizeof(cfg.Method), "%s", args->HttpMethod);
+  cfg.ExpectStatus = args->HttpStatus;
+  cfg.TimeoutMs = args->Timeout;
+  cfg.Quiet = args->Quiet;
+  Stats_Init(&stats);
+
+  if (!args->Json && !args->Prometheus) {
+    (void)snprintf(line, sizeof(line), "%s v%s\n", NAME, PINGDD_VERSION_FULL);
+    FormattedPrint(PRINT_BLUE, line);
+    (void)snprintf(line, sizeof(line), "HTTP probe %s %s\n", cfg.Method,
+                   args->HttpUrl);
+    FormattedPrint(PRINT_YELLOW, line);
+    ResetColor();
+  }
+
+  while ((g_interrupted == 0) &&
+         ((args->Count == -1) || (cycle < (unsigned long)args->Count))) {
+    http_result_t res;
+    int32_t r = Http_Probe(args->HttpUrl, &cfg, &res);
+    bool good = (r == (int32_t)SUCCESS) &&
+                ((cfg.ExpectStatus == 0)
+                     ? ((res.Status >= 200) && (res.Status < 400))
+                     : (res.Status == cfg.ExpectStatus));
+
+    stats.Attempts++;
+    if (good) {
+      ok++;
+      stats.Connects++;
+      Stats_AddSample(&stats, res.TotalMs / 1000.0);
+    } else {
+      stats.Failures++;
+    }
+
+    if (args->Json) {
+      char ipe[80] = {0};
+      JsonEscape(res.Ip, ipe, sizeof(ipe));
+      (void)printf("{\"seq\":%lu,\"url\":\"", cycle);
+      {
+        char ue[1100] = {0};
+        JsonEscape(args->HttpUrl, ue, sizeof(ue));
+        (void)printf("%s\",\"ip\":\"%s\",\"status\":%d,\"tls\":%s,"
+                     "\"tls_version\":\"%s\",\"cipher\":\"%s\","
+                     "\"connect_ms\":%.3f,\"total_ms\":%.3f,\"ok\":%s",
+                     ue, ipe, res.Status, res.Tls ? "true" : "false",
+                     res.TlsVersion, res.Cipher, res.ConnectMs, res.TotalMs,
+                     good ? "true" : "false");
+      }
+      if (res.Error[0] != '\0') {
+        char ee[200] = {0};
+        JsonEscape(res.Error, ee, sizeof(ee));
+        (void)printf(",\"error\":\"%s\"", ee);
+      }
+      (void)printf("}\n");
+    } else if (!args->Quiet && !args->Prometheus) {
+      if (r == (int32_t)SUCCESS) {
+        (void)snprintf(line, sizeof(line),
+                       "seq=%lu %s status=%d time=%.2fms connect=%.2fms",
+                       cycle, res.Ip, res.Status, res.TotalMs, res.ConnectMs);
+        FormattedPrint(good ? PRINT_GREEN : PRINT_YELLOW, line);
+        if (res.Tls) {
+          (void)snprintf(line, sizeof(line), " [%s %s]", res.TlsVersion,
+                         res.Cipher);
+          FormattedPrint(PRINT_BLUE, line);
+        }
+        (void)printf("\n");
+      } else {
+        (void)snprintf(line, sizeof(line), "seq=%lu failed: %s\n", cycle,
+                       res.Error);
+        FormattedPrint(PRINT_RED, line);
+      }
+      ResetColor();
+    }
+
+    cycle++;
+    if ((args->Count == -1) || (cycle < (unsigned long)args->Count)) {
+      delay_ms((args->Rate > 0U) ? args->Rate : 50U);
+    }
+  }
+
+  if (!args->Json && !args->Prometheus) {
+    double avg = Stats_Average(&stats) * 1000.0;
+    (void)snprintf(line, sizeof(line),
+                   "\n%lu sent, %lu ok, %lu failed; avg %.2f ms\n",
+                   (unsigned long)stats.Attempts, ok,
+                   (unsigned long)stats.Failures, avg);
+    FormattedPrint(PRINT_BLUE, line);
+    ResetColor();
+  }
+  Stats_Free(&stats);
+  return (ok > 0UL) ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
 /** @brief Print the combined (all-targets) human roll-up. */
 static void PrintCombinedHuman(target_list_t *list) {
   char buf[160U] = {0};
@@ -532,6 +692,92 @@ static void PrintCombinedHuman(target_list_t *list) {
   ResetColor();
 }
 
+/** @brief Write the per-target label set for a Prometheus series. */
+static void PromLabels(const probe_target_t *const t, char *const out,
+                       size_t const out_size) {
+  char le[400] = {0};
+  char he[280] = {0};
+  char ie[80] = {0};
+  char port[16] = {0};
+  JsonEscape(t->Label, le, sizeof(le));
+  JsonEscape(t->Host, he, sizeof(he));
+  JsonEscape(t->Resolved.IPAddress, ie, sizeof(ie));
+  if (t->Type != IPPROTO_ICMP) {
+    (void)snprintf(port, sizeof(port), "%u", (unsigned)t->Port);
+  }
+  (void)snprintf(out, out_size,
+                 "target=\"%s\",host=\"%s\",ip=\"%s\",proto=\"%s\",port=\"%s\"",
+                 le, he, ie, ProtoLabel(t->Type, t->Resolved.IPAddress), port);
+}
+
+/**
+ * @brief Emit a Prometheus / OpenMetrics text exposition for all targets.
+ *
+ * One block of HELP/TYPE per metric family, then one series per target, so the
+ * output is valid for scraping by node_exporter's textfile collector or a
+ * Pushgateway.
+ */
+static void WritePrometheus(FILE *const out, target_list_t *const list) {
+  size_t i = 0;
+  char lbl[900] = {0};
+
+  (void)fprintf(out, "# HELP pingdd_up Last-probe reachability (1=reachable).\n");
+  (void)fprintf(out, "# TYPE pingdd_up gauge\n");
+  for (i = 0; i < list->Count; i++) {
+    probe_target_t *t = &list->Items[i];
+    int up = (t->ResolveOk && (t->LastResult == (int32_t)SUCCESS)) ? 1 : 0;
+    PromLabels(t, lbl, sizeof(lbl));
+    (void)fprintf(out, "pingdd_up{%s} %d\n", lbl, up);
+  }
+
+  (void)fprintf(out, "# HELP pingdd_probes_total Total probes attempted.\n");
+  (void)fprintf(out, "# TYPE pingdd_probes_total counter\n");
+  for (i = 0; i < list->Count; i++) {
+    probe_target_t *t = &list->Items[i];
+    PromLabels(t, lbl, sizeof(lbl));
+    (void)fprintf(out, "pingdd_probes_total{%s} %lu\n", lbl,
+                  (unsigned long)t->Stats.Attempts);
+  }
+
+  (void)fprintf(out, "# HELP pingdd_failures_total Total failed probes.\n");
+  (void)fprintf(out, "# TYPE pingdd_failures_total counter\n");
+  for (i = 0; i < list->Count; i++) {
+    probe_target_t *t = &list->Items[i];
+    PromLabels(t, lbl, sizeof(lbl));
+    (void)fprintf(out, "pingdd_failures_total{%s} %lu\n", lbl,
+                  (unsigned long)t->Stats.Failures);
+  }
+
+  (void)fprintf(out, "# HELP pingdd_loss_ratio Fraction of probes that failed.\n");
+  (void)fprintf(out, "# TYPE pingdd_loss_ratio gauge\n");
+  for (i = 0; i < list->Count; i++) {
+    probe_target_t *t = &list->Items[i];
+    double loss = (t->Stats.Attempts > 0U)
+                      ? (double)t->Stats.Failures / (double)t->Stats.Attempts
+                      : 0.0;
+    PromLabels(t, lbl, sizeof(lbl));
+    (void)fprintf(out, "pingdd_loss_ratio{%s} %.6f\n", lbl, loss);
+  }
+
+  (void)fprintf(out,
+                "# HELP pingdd_rtt_seconds Round-trip time aggregates.\n");
+  (void)fprintf(out, "# TYPE pingdd_rtt_seconds gauge\n");
+  for (i = 0; i < list->Count; i++) {
+    probe_target_t *t = &list->Items[i];
+    PromLabels(t, lbl, sizeof(lbl));
+    if (t->Stats.Connects > 0U) {
+      (void)fprintf(out, "pingdd_rtt_seconds{%s,stat=\"min\"} %.6f\n", lbl,
+                    t->Stats.Minimum);
+      (void)fprintf(out, "pingdd_rtt_seconds{%s,stat=\"avg\"} %.6f\n", lbl,
+                    Stats_Average(&t->Stats));
+      (void)fprintf(out, "pingdd_rtt_seconds{%s,stat=\"max\"} %.6f\n", lbl,
+                    t->Stats.Maximum);
+      (void)fprintf(out, "pingdd_rtt_seconds{%s,quantile=\"0.95\"} %.6f\n", lbl,
+                    Stats_Percentile(&t->Stats, 95.0));
+    }
+  }
+}
+
 /** @brief Run the multi-target probe loop (sequential or concurrent). */
 static int ProbeLoop(const arguments_t *args, target_list_t *list,
                      double dns_ms) {
@@ -582,7 +828,7 @@ static int ProbeLoop(const arguments_t *args, target_list_t *list,
       }
     }
   }
-  if (!args->Json) {
+  if (!args->Json && !args->Prometheus) {
     char line[420] = {0};
     (void)snprintf(line, sizeof(line), "%s v%s\n", NAME, PINGDD_VERSION_FULL);
     FormattedPrint(PRINT_BLUE, line);
@@ -594,6 +840,14 @@ static int ProbeLoop(const arguments_t *args, target_list_t *list,
         (void)snprintf(line, sizeof(line), "  [%s]%s\n", t->Label,
                        t->ResolveOk ? "" : "  (unresolved)");
         FormattedPrint(t->ResolveOk ? PRINT_GREEN : PRINT_RED, line);
+        if (args->Resolve && t->ResolveOk) {
+          char ann[420] = {0};
+          char annline[460] = {0};
+          if (FormatAnnotation(&t->Resolved, ann, sizeof(ann))) {
+            (void)snprintf(annline, sizeof(annline), "      %s\n", ann);
+            FormattedPrint(PRINT_BLUE, annline);
+          }
+        }
       }
     } else {
       probe_target_t *t = &list->Items[0];
@@ -611,6 +865,15 @@ static int ProbeLoop(const arguments_t *args, target_list_t *list,
       FormattedPrint(PRINT_YELLOW, " on ");
       FormattedPrint(PRINT_GREEN, ts);
       FormattedPrint(PRINT_YELLOW, ":\n");
+      if (args->Resolve && t->ResolveOk) {
+        char ann[420] = {0};
+        char annline[500] = {0};
+        if (FormatAnnotation(&t->Resolved, ann, sizeof(ann))) {
+          (void)snprintf(annline, sizeof(annline), "  %s -> %s\n",
+                         t->Resolved.IPAddress, ann);
+          FormattedPrint(PRINT_BLUE, annline);
+        }
+      }
     }
     ResetColor();
   }
@@ -676,11 +939,11 @@ static int ProbeLoop(const arguments_t *args, target_list_t *list,
           continue;
         }
         PrintProbeJson(jsink[s], r, seq, t->LastIp, t->LastRtt, proto, show_port,
-                       t->Port, datetime, t->Host);
+                       t->Port, datetime, t->Host, t->LastTtl);
       }
-      if (!args->Quiet && !args->Json) {
+      if (!args->Quiet && !args->Json && !args->Prometheus) {
         PrintProbeHuman(r, seq, t->LastIp, t->LastRtt, proto, show_port,
-                        t->Port, datetime, multi ? t->Label : NULL);
+                        t->Port, datetime, multi ? t->Label : NULL, t->LastTtl);
       }
       Diag_Observe(&t->Diag, success, t->LastRtt);
     }
@@ -700,7 +963,7 @@ static int ProbeLoop(const arguments_t *args, target_list_t *list,
     delay_ms((args->Rate > 0U) ? args->Rate : 50U);
   }
 
-  if ((g_interrupted != 0) && !args->Json) {
+  if ((g_interrupted != 0) && !args->Json && !args->Prometheus) {
     FormattedPrint(PRINT_YELLOW, "\n^C interrupted\n");
     ResetColor();
   }
@@ -708,14 +971,14 @@ static int ProbeLoop(const arguments_t *args, target_list_t *list,
   /* Per-target summaries. */
   for (i = 0; i < list->Count; i++) {
     probe_target_t *t = &list->Items[i];
-    if (multi && !args->Json) {
+    if (multi && !args->Json && !args->Prometheus) {
       char hdr[360] = {0};
       (void)snprintf(hdr, sizeof(hdr), "\n-- %s --\n", t->Label);
       FormattedPrint(PRINT_YELLOW, hdr);
       ResetColor();
     }
     if (!t->ResolveOk) {
-      if (!args->Json) {
+      if (!args->Json && !args->Prometheus) {
         FormattedPrint(PRINT_RED, "        unresolved\n");
       }
       continue;
@@ -724,7 +987,7 @@ static int ProbeLoop(const arguments_t *args, target_list_t *list,
       PrintSummaryJson(jsink[s], &t->Stats, t->Host);
       Diag_PrintJson(jsink[s], &t->Diag, &t->Stats);
     }
-    if (!args->Json) {
+    if (!args->Json && !args->Prometheus) {
       PrintSummaryHuman(&t->Stats);
       Diag_PrintSummary(&t->Diag, &t->Stats);
       if (args->Monitor) {
@@ -741,8 +1004,11 @@ static int ProbeLoop(const arguments_t *args, target_list_t *list,
     }
   }
 
-  if (multi && !args->Json) {
+  if (multi && !args->Json && !args->Prometheus) {
     PrintCombinedHuman(list);
+  }
+  if (args->Prometheus) {
+    WritePrometheus(stdout, list);
   }
   (void)fflush(stdout);
 
@@ -805,6 +1071,14 @@ int main(int argc, char *const *argv) {
     }
   }
 
+  /* Optional IP ToS/DSCP marking on every probe socket. */
+  SetTos(args.Tos);
+
+  /* HTTP(S) probe mode is self-contained (URL carries the destination). */
+  if (args.HttpUrl != NULL) {
+    return RunHttpMode(&args);
+  }
+
   /* Build the target matrix (hosts x ports x protocols + specs + file). */
   if (Targets_Build(&args, &targets, err, sizeof(err)) != 0) {
     char msg[320] = {0};
@@ -822,6 +1096,34 @@ int main(int argc, char *const *argv) {
     PrintError("Error: no targets could be resolved");
     Targets_Free(&targets);
     return EXIT_FAILURE;
+  }
+
+  /* Optional reverse-DNS + ASN annotation of each resolved address. */
+  if (args.Resolve) {
+    size_t ti = 0;
+    for (ti = 0; ti < targets.Count; ti++) {
+      if (targets.Items[ti].ResolveOk) {
+        Resolve_Annotate(&targets.Items[ti].Resolved);
+      }
+    }
+  }
+
+  /* Traceroute: path discovery to a single target. */
+  if (args.Traceroute) {
+    trace_cfg_t tcfg;
+    int32_t tr = 0;
+    if (targets.Count != 1U) {
+      PrintError("Error: --traceroute supports a single target");
+      Targets_Free(&targets);
+      return EXIT_FAILURE;
+    }
+    tcfg.MaxHops = args.MaxHops;
+    tcfg.Queries = args.Queries;
+    tcfg.TimeoutMs = args.Timeout;
+    tcfg.Resolve = args.Resolve;
+    tr = Traceroute_Run(&targets.Items[0].Resolved, &tcfg);
+    Targets_Free(&targets);
+    return (tr == (int32_t)SUCCESS) ? EXIT_SUCCESS : EXIT_FAILURE;
   }
 
   /* Authorized load testing / resilience: single-target only. */

@@ -27,6 +27,27 @@ static struct sockaddr_storage g_src6;
 static int g_src4_set = 0;
 static int g_src6_set = 0;
 
+/* Optional IP ToS/DSCP byte applied to every probe socket (-1 = default). */
+static int g_tos = -1;
+
+void SetTos(int32_t const tos) { g_tos = (int)tos; }
+
+/** @brief Apply the configured ToS/DSCP byte to a socket, by family. */
+static void ApplyTos(pingdd_socket_t fd, int family) {
+  if (g_tos < 0) {
+    return;
+  }
+  if (family == AF_INET6) {
+    int v = g_tos;
+    (void)setsockopt(fd, IPPROTO_IPV6, IPV6_TCLASS, (const char *)&v,
+                     (socklen_t)sizeof(v));
+  } else {
+    int v = g_tos;
+    (void)setsockopt(fd, IPPROTO_IP, IP_TOS, (const char *)&v,
+                     (socklen_t)sizeof(v));
+  }
+}
+
 static int32_t InitializeWinsock(void);
 static void CloseSocket(pingdd_socket_t socket_fd);
 static int32_t MapConnectError(int const err);
@@ -38,7 +59,8 @@ static int32_t ProbeTcp(const struct sockaddr *addr, socklen_t addrlen,
 static int32_t ProbeUdp(const struct sockaddr *addr, socklen_t addrlen,
                         int32_t family, uint32_t timeout_ms, double *rtt);
 static int32_t ProbeIcmp(const struct sockaddr *addr, socklen_t addrlen,
-                         int32_t family, uint32_t timeout_ms, double *rtt);
+                         int32_t family, uint32_t timeout_ms, double *rtt,
+                         int32_t *ttl);
 
 pcc_t GetFriendlyTypeName(int32_t const type) {
   switch (type) {
@@ -321,6 +343,7 @@ static int32_t ProbeTcp(const struct sockaddr *addr, socklen_t addrlen,
     CloseSocket(fd);
     return PINGDD_SOCKET_FAILURE;
   }
+  ApplyTos(fd, family);
 
   Timer_Start(&timer);
 
@@ -398,6 +421,7 @@ static int32_t ProbeUdp(const struct sockaddr *addr, socklen_t addrlen,
     CloseSocket(fd);
     return PINGDD_SOCKET_FAILURE;
   }
+  ApplyTos(fd, family);
 
   /* connect() on a UDP socket just pins the peer so we receive ICMP errors. */
   if (connect(fd, addr, addrlen) == PINGDD_SOCKET_ERROR) {
@@ -643,7 +667,8 @@ static uint16_t IcmpChecksum(const uint8_t *data, size_t len) {
 
 /** @brief Windows ICMP echo via the IP Helper API (no raw socket needed). */
 static int32_t ProbeIcmp(const struct sockaddr *addr, socklen_t addrlen,
-                         int32_t family, uint32_t timeout_ms, double *rtt) {
+                         int32_t family, uint32_t timeout_ms, double *rtt,
+                         int32_t *ttl) {
   unsigned char payload[8] = {0};
   unsigned char reply[sizeof(ICMPV6_ECHO_REPLY) + 8 + 256] = {0};
   size_t k = 0;
@@ -697,6 +722,9 @@ static int32_t ProbeIcmp(const struct sockaddr *addr, socklen_t addrlen,
       ICMP_ECHO_REPLY *r = (ICMP_ECHO_REPLY *)reply;
       if (r->Status == IP_SUCCESS) {
         *rtt = (double)r->RoundTripTime / 1000.0;
+        if (ttl != NULL) {
+          *ttl = (int32_t)r->Options.Ttl;
+        }
         return SUCCESS;
       }
       return PINGDD_SOCKET_UNREACH;
@@ -713,7 +741,8 @@ static int32_t ProbeIcmp(const struct sockaddr *addr, socklen_t addrlen,
  * macOS) and falls back to a raw socket (needs CAP_NET_RAW / root).
  */
 static int32_t ProbeIcmp(const struct sockaddr *addr, socklen_t addrlen,
-                         int32_t family, uint32_t timeout_ms, double *rtt) {
+                         int32_t family, uint32_t timeout_ms, double *rtt,
+                         int32_t *ttl) {
   static uint16_t icmp_seq = 0U;
   pingdd_socket_t fd = PINGDD_INVALID_SOCKET;
   pingdd_timer_t rtt_timer = (pingdd_timer_t){0};
@@ -745,6 +774,7 @@ static int32_t ProbeIcmp(const struct sockaddr *addr, socklen_t addrlen,
     CloseSocket(fd);
     return PINGDD_SOCKET_FAILURE;
   }
+  ApplyTos(fd, family);
 
   pkt[0] = is_v6 ? 128U : 8U; /* echo request type */
   pkt[1] = 0U;                /* code */
@@ -829,6 +859,11 @@ static int32_t ProbeIcmp(const struct sockaddr *addr, socklen_t addrlen,
       }
     }
 
+    /* A raw IPv4 reply carries the IP header, whose 9th byte is the TTL. */
+    if ((ttl != NULL) && (is_raw != 0) && (is_v6 == 0) && (n >= 9)) {
+      *ttl = (int32_t)rbuf[8];
+    }
+
     *rtt = Timer_Stop(&rtt_timer);
     CloseSocket(fd);
     return SUCCESS;
@@ -839,12 +874,16 @@ static int32_t ProbeIcmp(const struct sockaddr *addr, socklen_t addrlen,
 
 int32_t Connect(host_t const *const host, uint32_t const timeout_ms,
                 double *const rtt, char *const out_ip,
-                size_t const out_ip_size) {
+                size_t const out_ip_size, int32_t *const out_ttl) {
   size_t i = 0;
   int32_t last_result = PINGDD_SOCKET_FAILURE;
 
   if ((host == NULL) || (rtt == NULL) || (host->AddrCount == 0U)) {
     return PINGDD_INVALID_ARGS;
+  }
+
+  if (out_ttl != NULL) {
+    *out_ttl = -1;
   }
 
   if (InitializeWinsock() != SUCCESS) {
@@ -862,7 +901,7 @@ int32_t Connect(host_t const *const host, uint32_t const timeout_ms,
     if (host->Type == IPPROTO_ICMP) {
       /* ICMP has no port; the address is used as resolved. */
       result = ProbeIcmp((const struct sockaddr *)&addr, addrlen, family,
-                         timeout_ms, rtt);
+                         timeout_ms, rtt, out_ttl);
     } else if (host->Type == IPPROTO_UDP) {
       SetSockAddrPort(family, &addr, host->Port);
       result = ProbeUdp((const struct sockaddr *)&addr, addrlen, family,

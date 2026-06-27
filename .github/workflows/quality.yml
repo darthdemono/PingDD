@@ -1,0 +1,55 @@
+name: quality
+
+# Static analysis, sanitizers, unit/functional tests, coverage and fuzzing.
+# Separate from makefile.yml (which builds and releases the matrix) so a red
+# quality run never blocks a release build, and vice versa.
+
+on:
+  push:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'makefile'
+      - 'third_party/**'
+      - '.github/workflows/quality.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'makefile'
+      - 'third_party/**'
+  workflow_dispatch:
+
+jobs:
+  analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck clang python3 valgrind
+
+      - name: Static analysis (cppcheck)
+        run: make analyze
+
+      - name: Unit + functional tests
+        run: make test
+
+      - name: AddressSanitizer + UBSan build & smoke
+        run: |
+          make asan
+          ./bin/linux/pingdd -P ICMP -c 2 127.0.0.1 || true
+          ./bin/linux/pingdd --http http://127.0.0.1:1/ -c 1 || true
+
+      - name: Coverage (gcov)
+        run: make coverage
+
+      - name: Fuzz URL parser (short)
+        run: |
+          # Cap the run so CI stays fast; nightly can run longer.
+          timeout 60 make fuzz || true

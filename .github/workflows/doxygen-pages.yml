@@ -20,6 +20,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: recursive
 
       # Match your CI versioning style (GitVersion) so docs show the same version.
       - name: Setup GitVersion
@@ -39,13 +40,6 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y doxygen graphviz
-
-      - name: Fetch doxygen-awesome-css
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -rf doxygen-awesome-css
-          git clone --depth 1 https://github.com/jothepro/doxygen-awesome-css.git doxygen-awesome-css
 
       - name: Prepare Doxyfile for CI
         shell: bash
@@ -74,15 +68,9 @@ jobs:
           # Graphviz: use dot from PATH (runner has it because you install graphviz)
           sed -i 's|^DOT_PATH *=.*|DOT_PATH = |' Doxyfile.ci
 
-          # doxygen-awesome-css (sidebar-only theme)
-          sed -i 's|^FULL_SIDEBAR *=.*|FULL_SIDEBAR = NO|' Doxyfile.ci
-          sed -i 's|^DISABLE_INDEX *=.*|DISABLE_INDEX = NO|' Doxyfile.ci
-          sed -i 's|^GENERATE_TREEVIEW *=.*|GENERATE_TREEVIEW = YES|' Doxyfile.ci
-          sed -i 's|^HTML_COLORSTYLE *=.*|HTML_COLORSTYLE = LIGHT|' Doxyfile.ci
-
-          # Include theme CSS + your overrides (overrides must come last)
-          # Note: this REPLACES any existing HTML_EXTRA_STYLESHEET line.
-          sed -i 's|^HTML_EXTRA_STYLESHEET *=.*|HTML_EXTRA_STYLESHEET = doxygen-awesome-css/doxygen-awesome.css \\\n  doxygen-awesome-css/doxygen-awesome-sidebar-only.css \\\n  docs/doxygen-custom.css|' Doxyfile.ci
+          # doxygen-awesome-css theme is vendored as a submodule and already wired
+          # into the committed Doxyfile (HTML_EXTRA_STYLESHEET, FULL_SIDEBAR=NO,
+          # HTML_COLORSTYLE=LIGHT). Nothing to patch here.
 
       - name: Generate documentation
         shell: bash

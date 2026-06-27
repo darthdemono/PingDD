@@ -105,6 +105,12 @@ typedef struct {
   /** @brief Reverse-DNS (PTR) name of the primary address, empty if none. */
   char ReverseName[256];
 
+  /** @brief Autonomous System number of the primary address ("AS13335"). */
+  char Asn[24];
+
+  /** @brief AS holder/organisation name, empty if unknown. */
+  char AsnOrg[128];
+
   /** @brief Resolved socket addresses (IPv4 and/or IPv6), in priority order. */
   struct sockaddr_storage Addrs[MAX_RESOLVED_ADDRS];
 

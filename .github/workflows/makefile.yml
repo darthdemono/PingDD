@@ -24,6 +24,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: recursive
 
       - name: Check if src/ changed
         id: changes
@@ -65,6 +66,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: recursive
 
       - name: Setup GitVersion
         uses: gittools/actions/gitversion/setup@v4
@@ -219,6 +221,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: recursive
 
       - name: Setup GitVersion
         uses: gittools/actions/gitversion/setup@v4
@@ -394,6 +397,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: recursive
 
       - name: Setup GitVersion
         uses: gittools/actions/gitversion/setup@v4
@@ -469,6 +473,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: recursive
 
       - name: Setup GitVersion
         uses: gittools/actions/gitversion/setup@v4
@@ -522,6 +527,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: recursive
 
       - name: Setup GitVersion
         uses: gittools/actions/gitversion/setup@v4
@@ -581,11 +587,13 @@ jobs:
     permissions:
       contents: write
       actions: read
+      id-token: write # required for cosign keyless (Sigstore OIDC) signing
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: recursive
 
       - name: Get commit history since last release
         id: changelog
@@ -649,21 +657,16 @@ jobs:
           # Windows
           # -----------------------------
           package "artifacts/pingdd-win32-${VERSION}-signed/pingdd.exe" \
-                  "pingdd-windows-x86.zip" "pingdd.exe"
+                  "pingdd-${VERSION}-windows-x86.zip" "pingdd.exe"
           package "artifacts/pingdd-winarm64-${VERSION}-signed/pingdd.exe" \
-                  "pingdd-windows-arm64.zip" "pingdd.exe"
-
-          # Raw x86 exe so WinGet (installers-regex 'pingdd\.exe$') has a
-          # direct portable installer to point at.
-          cp "artifacts/pingdd-win32-${VERSION}-signed/pingdd.exe" \
-             "release-assets/pingdd.exe"
+                  "pingdd-${VERSION}-windows-arm64.zip" "pingdd.exe"
 
           # -----------------------------
           # Linux x86 (per-distro build; binary carries a distro suffix on disk)
           # -----------------------------
           for d in "${distros[@]}"; do
             src=$(ls "artifacts/pingdd-${d}-x86-${VERSION}/pingdd-"* | head -n1)
-            package "$src" "pingdd-${d}-x86.zip" "pingdd"
+            package "$src" "pingdd-${VERSION}-${d}-x86.zip" "pingdd"
           done
 
           # -----------------------------
@@ -673,11 +676,42 @@ jobs:
           ARM_BIN="artifacts/pingdd-linux-arm-${VERSION}/pingdd-arm"
 
           for d in "${distros[@]}"; do
-            package "$ARM64_BIN" "pingdd-${d}-arm64.zip" "pingdd"
-            package "$ARM_BIN"   "pingdd-${d}-arm.zip"   "pingdd"
+            package "$ARM64_BIN" "pingdd-${VERSION}-${d}-arm64.zip" "pingdd"
+            package "$ARM_BIN"   "pingdd-${VERSION}-${d}-arm.zip"   "pingdd"
           done
 
           echo "=== Final release assets ==="
+          ls -lh release-assets/
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign Linux assets (cosign keyless)
+        shell: bash
+        env:
+          COSIGN_YES: "true"
+        run: |
+          set -euo pipefail
+
+          # Keyless (Sigstore) signing via the job's OIDC token. No secrets to
+          # manage; each Linux zip gets a detached .sig + .pem certificate that
+          # `cosign verify-blob` can check against the workflow identity.
+          # Windows binaries are already Authenticode self-signed, so skip them.
+          shopt -s nullglob
+          for zip in release-assets/pingdd-*-x86.zip \
+                     release-assets/pingdd-*-arm64.zip \
+                     release-assets/pingdd-*-arm.zip; do
+            case "$zip" in
+              *windows*) continue ;;
+            esac
+            echo "Signing ${zip}"
+            cosign sign-blob \
+              --output-signature "${zip}.sig" \
+              --output-certificate "${zip}.pem" \
+              "${zip}"
+          done
+
+          echo "=== Release assets after signing ==="
           ls -lh release-assets/
 
       - name: Create GitHub Release
@@ -690,36 +724,51 @@ jobs:
 
             ## Downloads
 
+            Asset names follow `pingdd-<version>-<os>-<arch>.zip`
+            (version = `${{ needs.build-windows.outputs.semver }}`).
+
             ### Windows
-            - `pingdd-windows-x86.zip` - Windows 32-bit (self-signed)
-            - `pingdd-windows-arm64.zip` - Windows ARM64 (self-signed)
+            - `pingdd-<version>-windows-x86.zip` - Windows 32-bit (self-signed)
+            - `pingdd-<version>-windows-arm64.zip` - Windows ARM64 (self-signed)
 
             ### Linux (x86)
-            - `pingdd-ubuntu-24.04-x86.zip` - Ubuntu 24.04 x86
-            - `pingdd-ubuntu-22.04-x86.zip` - Ubuntu 22.04 x86
-            - `pingdd-debian-bookworm-x86.zip` - Debian Bookworm x86
-            - `pingdd-debian-bullseye-x86.zip` - Debian Bullseye x86
-            - `pingdd-fedora-40-x86.zip` - Fedora 40 x86
-            - `pingdd-alpine-3.19-x86.zip` - Alpine 3.19
-            - `pingdd-centos-stream9-x86.zip` - CentOS Stream 9 x86
+            - `pingdd-<version>-ubuntu-24.04-x86.zip` - Ubuntu 24.04 x86
+            - `pingdd-<version>-ubuntu-22.04-x86.zip` - Ubuntu 22.04 x86
+            - `pingdd-<version>-debian-bookworm-x86.zip` - Debian Bookworm x86
+            - `pingdd-<version>-debian-bullseye-x86.zip` - Debian Bullseye x86
+            - `pingdd-<version>-fedora-40-x86.zip` - Fedora 40 x86
+            - `pingdd-<version>-alpine-3.19-x86.zip` - Alpine 3.19
+            - `pingdd-<version>-centos-stream9-x86.zip` - CentOS Stream 9 x86
 
             ### Linux (arm64)
-            - `pingdd-ubuntu-24.04-arm64.zip` - Ubuntu 24.04 arm64
-            - `pingdd-ubuntu-22.04-arm64.zip` - Ubuntu 22.04 arm64
-            - `pingdd-debian-bookworm-arm64.zip` - Debian Bookworm arm64
-            - `pingdd-debian-bullseye-arm64.zip` - Debian Bullseye arm64
-            - `pingdd-fedora-40-arm64.zip` - Fedora 40 arm64
-            - `pingdd-alpine-3.19-arm64.zip` - Alpine 3.19 arm64
-            - `pingdd-centos-stream9-arm64.zip` - CentOS Stream 9 arm64
+            - `pingdd-<version>-ubuntu-24.04-arm64.zip` - Ubuntu 24.04 arm64
+            - `pingdd-<version>-ubuntu-22.04-arm64.zip` - Ubuntu 22.04 arm64
+            - `pingdd-<version>-debian-bookworm-arm64.zip` - Debian Bookworm arm64
+            - `pingdd-<version>-debian-bullseye-arm64.zip` - Debian Bullseye arm64
+            - `pingdd-<version>-fedora-40-arm64.zip` - Fedora 40 arm64
+            - `pingdd-<version>-alpine-3.19-arm64.zip` - Alpine 3.19 arm64
+            - `pingdd-<version>-centos-stream9-arm64.zip` - CentOS Stream 9 arm64
 
             ### Linux (arm)
-            - `pingdd-ubuntu-24.04-arm.zip` - Ubuntu 24.04 arm
-            - `pingdd-ubuntu-22.04-arm.zip` - Ubuntu 22.04 arm
-            - `pingdd-debian-bookworm-arm.zip` - Debian Bookworm arm
-            - `pingdd-debian-bullseye-arm.zip` - Debian Bullseye arm
-            - `pingdd-fedora-40-arm.zip` - Fedora 40 arm
-            - `pingdd-alpine-3.19-arm.zip` - Alpine 3.19 arm
-            - `pingdd-centos-stream9-arm.zip` - CentOS Stream 9 arm
+            - `pingdd-<version>-ubuntu-24.04-arm.zip` - Ubuntu 24.04 arm
+            - `pingdd-<version>-ubuntu-22.04-arm.zip` - Ubuntu 22.04 arm
+            - `pingdd-<version>-debian-bookworm-arm.zip` - Debian Bookworm arm
+            - `pingdd-<version>-debian-bullseye-arm.zip` - Debian Bullseye arm
+            - `pingdd-<version>-fedora-40-arm.zip` - Fedora 40 arm
+            - `pingdd-<version>-alpine-3.19-arm.zip` - Alpine 3.19 arm
+            - `pingdd-<version>-centos-stream9-arm.zip` - CentOS Stream 9 arm
+
+            ### Verifying Linux downloads (Cosign / Sigstore)
+
+            Each Linux `.zip` ships a keyless `.sig` + `.pem`. Verify with:
+            ```
+            cosign verify-blob \
+              --certificate pingdd-<version>-<os>-<arch>.zip.pem \
+              --signature  pingdd-<version>-<os>-<arch>.zip.sig \
+              --certificate-identity-regexp 'https://github.com/.*/PingDD/.*' \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              pingdd-<version>-<os>-<arch>.zip
+            ```
 
             ### Changes
             ${{ steps.changelog.outputs.commits }}

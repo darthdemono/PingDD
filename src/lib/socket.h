@@ -44,6 +44,8 @@ pcc_t GetFriendlyTypeName(int32_t const type);
  * @param[out] rtt         Round-trip time in seconds.
  * @param[out] out_ip      Buffer receiving the IP string actually probed.
  * @param[in]  out_ip_size Size of @p out_ip in bytes.
+ * @param[out] out_ttl     Receives the reply TTL/hop-limit, or -1 when the
+ *                         platform/probe type cannot report it. May be NULL.
  *
  * @retval SUCCESS                 Port reachable (TCP connected / UDP replied).
  * @retval PINGDD_SOCKET_TIMEOUT   Attempt timed out.
@@ -55,7 +57,15 @@ pcc_t GetFriendlyTypeName(int32_t const type);
  * @retval PINGDD_INVALID_ARGS     Invalid input arguments.
  */
 int32_t Connect(const host_t *const host, uint32_t const timeout_ms,
-                double *const rtt, char *const out_ip, size_t const out_ip_size);
+                double *const rtt, char *const out_ip, size_t const out_ip_size,
+                int32_t *const out_ttl);
+
+/**
+ * @brief Set the IP ToS/DSCP byte applied to all subsequent probe sockets.
+ *
+ * @param[in] tos ToS byte value (0..255), or negative to leave the OS default.
+ */
+void SetTos(int32_t const tos);
 
 /**
  * @brief Resolve a destination into one or more IPv4/IPv6 addresses.
