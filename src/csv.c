@@ -24,7 +24,7 @@ static void SanitizeForFilename(pcc_t const src, char *const dst,
     return;
   }
 
-  for (i = 0; (src[i] != '\0') && (i < (dst_size - 1U)); i++) {
+  for (i = 0; (i < (dst_size - 1U)) && (src[i] != '\0'); i++) {
     unsigned char c = (unsigned char)src[i];
     if ((isalnum(c) != 0) || (c == '.') || (c == '-') || (c == '_')) {
       dst[i] = (char)c;
