@@ -649,7 +649,9 @@ jobs:
             stage="$(mktemp -d)"
             cp "$src" "$stage/$inner"
             chmod +x "$stage/$inner" || true
-            ( cd "$stage" && zip -q "$GITHUB_WORKSPACE/release-assets/$zipname" "$inner" )
+            # Apache 2.0 section 4: redistributions carry LICENSE and NOTICE.
+            cp "$GITHUB_WORKSPACE/LICENSE" "$GITHUB_WORKSPACE/NOTICE" "$stage/"
+            ( cd "$stage" && zip -q "$GITHUB_WORKSPACE/release-assets/$zipname" "$inner" LICENSE NOTICE )
             rm -rf "$stage"
           }
 

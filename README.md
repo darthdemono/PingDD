@@ -367,4 +367,4 @@ Contributions are welcome.
 
 ## License
 
-MIT License. See [LICENSE](https://github.com/darthdemono/PingDD/blob/main/LICENSE).
+Apache License 2.0. See [LICENSE](https://github.com/darthdemono/PingDD/blob/main/LICENSE).
