@@ -189,7 +189,7 @@ jobs:
                                            -KeyLength 2048 `
                                            -HashAlgorithm SHA256
 
-          & $signtool sign /n "DarthDemono" /tr http://timestamp.digicert.com /td sha256 bin/win-x86/pingdd.exe
+          & $signtool sign /n "DarthDemono" /tr http://timestamp.digicert.com /td sha256 /fd sha256 bin/win-x86/pingdd.exe
           echo "Self-signed: bin/win-x86/pingdd.exe"
 
       - name: Upload Windows artifact
@@ -341,7 +341,7 @@ jobs:
                                            -KeyLength 2048 `
                                            -HashAlgorithm SHA256
 
-          & $signtool sign /n "DarthDemono" /tr http://timestamp.digicert.com /td sha256 bin/win-arm64/pingdd.exe
+          & $signtool sign /n "DarthDemono" /tr http://timestamp.digicert.com /td sha256 /fd sha256 bin/win-arm64/pingdd.exe
           echo "Self-signed: bin/win-arm64/pingdd.exe"
 
       - name: Upload Windows ARM64 artifact
