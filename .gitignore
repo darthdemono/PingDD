@@ -9,9 +9,6 @@ CLAUDE.md
 CLAUDE.local.md
 .claude/settings.local.json
 
-# Local-only test harness
-tests/
-
 # Doxygen
 html/
 search/
@@ -53,3 +50,11 @@ search/
 
 # Ignore gitignore file itself (optional, usually not needed)
 # .gitignore
+# Local LLM assistant instructions and state
+.claude/
+.codex/
+.gemini/
+AGENTS*.md
+CLAUDE*.md
+CODEX*.md
+GEMINI*.md
