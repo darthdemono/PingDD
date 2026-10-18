@@ -47,7 +47,7 @@ static char *pd_strtok_r(char *str, const char *delim, char **saveptr) {
 static int32_t ProtoFromToken(const char *tok) {
   size_t n = 0;
   char low[8] = {0};
-  for (n = 0; (tok[n] != '\0') && (n < sizeof(low) - 1U); n++) {
+  for (n = 0; (n < sizeof(low) - 1U) && (tok[n] != '\0'); n++) {
     low[n] = (char)tolower((unsigned char)tok[n]);
   }
   if (strcmp(low, "tcp") == 0) {
