@@ -20,6 +20,9 @@ on:
       - 'third_party/**'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   analysis:
     runs-on: ubuntu-latest
