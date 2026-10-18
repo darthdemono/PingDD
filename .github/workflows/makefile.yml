@@ -177,18 +177,10 @@ jobs:
           choco install windows-sdk-10.0 -y --force
           refreshenv
 
-          $signToolPaths = @(
-            "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.0.26621.0\x64\signtool.exe",
-            "${env:ProgramFiles(x86)}\Windows Kits\10\bin\x64\signtool.exe"
-          )
-          $signtool = $null
-          foreach ($path in $signToolPaths) {
-            if (Test-Path $path) {
-              $signtool = $path
-              Write-Output "Found SignTool: $signtool"
-              break
-            }
-          }
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\x64\\' } | Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $signtool) { throw "signtool.exe not found" }
+          Write-Output "Found SignTool: $signtool"
           $env:PATH += ";$($signtool | Split-Path -Parent)"
 
           $cert = New-SelfSignedCertificate -Subject "CN=DarthDemono" `
@@ -338,15 +330,10 @@ jobs:
           choco install windows-sdk-10.0 -y --force
           refreshenv
 
-          $signToolPaths = @(
-            "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.0.26621.0\x64\signtool.exe",
-            "${env:ProgramFiles(x86)}\Windows Kits\10\bin\x64\signtool.exe"
-          )
-          $signtool = $null
-          foreach ($path in $signToolPaths) {
-            if (Test-Path $path) { $signtool = $path; break }
-          }
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\x64\\' } | Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
           if (-not $signtool) { throw "signtool.exe not found" }
+          Write-Output "Found SignTool: $signtool"
 
           $cert = New-SelfSignedCertificate -Subject "CN=DarthDemono" `
                                            -Type CodeSigningCert `
@@ -432,6 +419,11 @@ jobs:
             ${{ matrix.distro }} \
             /bin/sh -c '
               if command -v apt-get >/dev/null 2>&1; then
+                # Debian bullseye is EOL: its repos live on archive.debian.org.
+                if grep -q bullseye /etc/os-release; then
+                  sed -i "s|deb.debian.org|archive.debian.org|; s|security.debian.org|archive.debian.org|" /etc/apt/sources.list 2>/dev/null || true
+                  echo "Acquire::Check-Valid-Until false;" > /etc/apt/apt.conf.d/99archive
+                fi
                 apt-get update -qq || apt-get update -qq --fix-missing || true
                 apt-get install -y --no-install-recommends gcc make libc6-dev
               elif command -v apk >/dev/null 2>&1; then
