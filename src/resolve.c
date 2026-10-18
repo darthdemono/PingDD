@@ -288,15 +288,17 @@ static bool BuildOriginQuery(const struct sockaddr *const addr,
   if (addr->sa_family == AF_INET6) {
     const uint8_t *b =
         (const uint8_t *)&((const struct sockaddr_in6 *)addr)->sin6_addr;
+    static const char hex[] = "0123456789abcdef";
     char nibbles[80];
     size_t pos = 0;
     int i = 0;
     for (i = 15; i >= 0; i--) {
-      int hi = (b[i] >> 4) & 0xF;
-      int lo = b[i] & 0xF;
-      pos += (size_t)snprintf(&nibbles[pos], sizeof(nibbles) - pos,
-                              "%x.%x.", lo, hi);
+      nibbles[pos++] = hex[b[i] & 0xF];
+      nibbles[pos++] = '.';
+      nibbles[pos++] = hex[(b[i] >> 4) & 0xF];
+      nibbles[pos++] = '.';
     }
+    nibbles[pos] = '\0';
     (void)snprintf(out, out_size, "%sorigin6.asn.cymru.com", nibbles);
     return true;
   }
