@@ -319,7 +319,6 @@ int32_t ProcessArguments(int32_t const argc, char *const *const argv,
     }
     else if (strcmp(arg, "--no-config") == 0) {
       /* Handled in the pre-scan; accepted here so it is not "unknown". */
-      (void)0;
     }
     /* Annotate resolved addresses with reverse DNS + ASN. */
     else if (strcmp(arg, "--resolve") == 0) {
